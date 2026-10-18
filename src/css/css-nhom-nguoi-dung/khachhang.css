@@ -1,0 +1,134 @@
+/* =========================================================
+   BẢNG MÀU TỐI GIẢN & CHUYÊN NGHIỆP (TÔNG HỒNG CON CƯNG SOFT)
+   ========================================================= */
+:root {
+    --primary: #ff4d8d;          /* Hồng Con Cưng */
+    --primary-hover: #e03a75;
+    --text-main: #1e293b;        /* Chữ tối tiêu chuẩn UI chuyên nghiệp */
+    --text-muted: #64748b;       /* Chữ ghi nhạt */
+    --bg-body: #f8fafc;          /* Nền xám tro dịu mắt */
+    --card-bg: #ffffff;          /* Nền trắng thẻ nội dung */
+    --border-color: #e2e8f0;     /* Viền mảnh tinh tế */
+}
+
+/* Reset cơ bản */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background-color: var(--bg-body);
+    color: var(--text-main);
+    line-height: 1.5;
+}
+
+/* Header phẳng, hiện đại */
+.header {
+    background-color: var(--card-bg);
+    border-bottom: 1px solid var(--border-color);
+    position: sticky;
+    top: 0;
+    z-index: 100;
+}
+
+.header-container {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 0 20px;
+    height: 64px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+/* Logo */
+.logo {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    text-decoration: none;
+}
+
+.logo-icon {
+    font-size: 1.4rem;
+}
+
+.logo-text {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: var(--primary);
+}
+
+/* Menu điều hướng */
+.nav {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+}
+
+.nav-link {
+    text-decoration: none;
+    color: var(--text-main);
+    font-size: 0.95rem;
+    font-weight: 500;
+    transition: color 0.2s ease;
+}
+
+.nav-link:hover {
+    color: var(--primary);
+}
+
+.btn-logout {
+    text-decoration: none;
+    color: var(--text-muted);
+    font-size: 0.9rem;
+    font-weight: 500;
+    padding: 6px 14px;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    transition: all 0.2s ease;
+}
+
+.btn-logout:hover {
+    border-color: var(--primary);
+    color: var(--primary);
+}
+
+/* Bố cục nội dung chính */
+.container {
+    max-width: 900px;
+    margin: 32px auto;
+    padding: 0 20px;
+}
+
+.page-title {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--text-main);
+    margin-bottom: 24px;
+}
+
+/* Các khối card tối giản */
+.card {
+    background-color: var(--card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 24px;
+    margin-bottom: 20px;
+}
+
+.card-title {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--text-main);
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--border-color);
+    margin-bottom: 16px;
+}
+
+.card-content {
+    min-height: 100px; /* Khoảng trống sạch để tự thêm thông tin sau */
+}
