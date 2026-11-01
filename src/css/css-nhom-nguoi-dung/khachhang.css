@@ -4,7 +4,7 @@
 :root {
     --primary: #ff4d8d;          /* Hồng Con Cưng */
     --primary-hover: #e03a75;
-    --text-main: #1e293b;        /* Chữ tối tiêu chuẩn UI chuyên nghiệp */
+    --text-main: #1e293b;        /* Chữ tối tiêu chuẩn UI */
     --text-muted: #64748b;       /* Chữ ghi nhạt */
     --bg-body: #f8fafc;          /* Nền xám tro dịu mắt */
     --card-bg: #ffffff;          /* Nền trắng thẻ nội dung */
@@ -25,7 +25,7 @@ body {
     line-height: 1.5;
 }
 
-/* Header phẳng, hiện đại */
+/* Header */
 .header {
     background-color: var(--card-bg);
     border-bottom: 1px solid var(--border-color);
@@ -44,16 +44,11 @@ body {
     justify-content: space-between;
 }
 
-/* Logo */
 .logo {
     display: flex;
     align-items: center;
     gap: 8px;
     text-decoration: none;
-}
-
-.logo-icon {
-    font-size: 1.4rem;
 }
 
 .logo-text {
@@ -62,7 +57,6 @@ body {
     color: var(--primary);
 }
 
-/* Menu điều hướng */
 .nav {
     display: flex;
     align-items: center;
@@ -81,25 +75,9 @@ body {
     color: var(--primary);
 }
 
-.btn-logout {
-    text-decoration: none;
-    color: var(--text-muted);
-    font-size: 0.9rem;
-    font-weight: 500;
-    padding: 6px 14px;
-    border: 1px solid var(--border-color);
-    border-radius: 6px;
-    transition: all 0.2s ease;
-}
-
-.btn-logout:hover {
-    border-color: var(--primary);
-    color: var(--primary);
-}
-
-/* Bố cục nội dung chính */
+/* Main Container */
 .container {
-    max-width: 900px;
+    max-width: 1000px;
     margin: 32px auto;
     padding: 0 20px;
 }
@@ -111,7 +89,6 @@ body {
     margin-bottom: 24px;
 }
 
-/* Các khối card tối giản */
 .card {
     background-color: var(--card-bg);
     border: 1px solid var(--border-color);
@@ -129,6 +106,158 @@ body {
     margin-bottom: 16px;
 }
 
-.card-content {
-    min-height: 100px; /* Khoảng trống sạch để tự thêm thông tin sau */
+/* Ẩn hiện phần tử */
+.hidden {
+    display: none !important;
+}
+
+/* Thông tin cá nhân */
+.profile-display {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.info-group {
+    display: flex;
+    gap: 12px;
+    font-size: 0.95rem;
+}
+
+.info-label {
+    font-weight: 600;
+    color: var(--text-muted);
+    min-width: 120px;
+}
+
+.info-value {
+    color: var(--text-main);
+}
+
+/* Form chỉnh sửa */
+.profile-form {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    max-width: 600px;
+}
+
+.form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.form-group label {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--text-main);
+}
+
+.form-group input {
+    padding: 10px 14px;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    font-size: 0.95rem;
+    color: var(--text-main);
+    background-color: var(--card-bg);
+    outline: none;
+    transition: border-color 0.2s ease;
+}
+
+.form-group input:focus {
+    border-color: var(--primary);
+}
+
+.form-actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 8px;
+}
+
+/* Nút bấm dùng chung */
+.btn-primary {
+    padding: 9px 18px;
+    background-color: var(--primary);
+    color: #ffffff;
+    border: none;
+    border-radius: 6px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    align-self: flex-start;
+    transition: background-color 0.2s ease;
+}
+
+.btn-primary:hover {
+    background-color: var(--primary-hover);
+}
+
+.btn-secondary {
+    padding: 9px 18px;
+    background-color: #e2e8f0;
+    color: var(--text-main);
+    border: none;
+    border-radius: 6px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+}
+
+.btn-secondary:hover {
+    background-color: #cbd5e1;
+}
+
+/* Lưới 9 dịch vụ */
+.services-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 16px;
+}
+
+.service-item {
+    background-color: #f8fafc;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    gap: 16px;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.service-item:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+}
+
+.service-name {
+    font-size: 1.05rem;
+    font-weight: 600;
+    color: var(--primary);
+    margin-bottom: 8px;
+}
+
+.service-desc {
+    font-size: 0.9rem;
+    color: var(--text-muted);
+    line-height: 1.4;
+}
+
+/* Khung chi tiết dịch vụ */
+.detail-box {
+    background-color: #ffffff;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 20px;
+}
+
+.benefits-box {
+    background-color: #f8fafc;
+    padding: 14px;
+    border-radius: 6px;
+    margin-bottom: 16px;
+    border: 1px solid var(--border-color);
 }

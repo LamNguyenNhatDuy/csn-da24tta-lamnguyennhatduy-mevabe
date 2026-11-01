@@ -3,15 +3,15 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Khách Hàng - Mẹ & Bé</title>
+    <title>Trang Khách Hàng - Mẹ & Bé</title>
     <link rel="stylesheet" href="../../css/css-nhom-nguoi-dung/khachhang.css">
 </head>
 <body>
 
+    <!-- HEADER / THANH ĐIỀU HƯỚNG -->
     <header class="header">
         <div class="header-container">
             <a href="khachhang.html" class="logo">
-                <span class="logo-icon">👶</span>
                 <span class="logo-text">Mẹ & Bé</span>
             </a>
             
@@ -24,23 +24,204 @@
     </header>
 
     <main class="container">
-        <h1 class="page-title">Trang Khách Hàng</h1>
+        <h1 class="page-title">Trang Quản Lý Khách Hàng</h1>
 
+        <!-- ================= MỤC 1: THÔNG TIN CÁ NHÂN & DỊCH VỤ ĐÃ ĐĂNG KÝ ================= -->
         <section id="thong-tin" class="card">
-            <h2 class="card-title">Thông Tin Cá Nhân</h2>
-            <div class="card-content"></div>
+            <h2 class="card-title">Thông Tin Cá Nhân & Dịch Vụ Của Tôi</h2>
+            <div class="card-content">
+                
+                <!-- GIAO DIỆN 1A: HIỂN THỊ THÔNG TIN -->
+                <div id="profile-display" class="profile-display">
+                    <div class="info-group">
+                        <span class="info-label">Họ và tên:</span>
+                        <span id="disp-fullname" class="info-value">Chưa cập nhật</span>
+                    </div>
+                    <div class="info-group">
+                        <span class="info-label">Số điện thoại:</span>
+                        <span id="disp-phone" class="info-value">Chưa cập nhật</span>
+                    </div>
+                    <div class="info-group">
+                        <span class="info-label">Ngày sinh:</span>
+                        <span id="disp-dob" class="info-value">Chưa cập nhật</span>
+                    </div>
+                    <div class="info-group">
+                        <span class="info-label">Địa chỉ:</span>
+                        <span id="disp-address" class="info-value">Chưa cập nhật</span>
+                    </div>
+
+                    <button type="button" id="btn-edit" class="btn-primary" style="margin-top: 8px;">Thay đổi thông tin</button>
+                </div>
+
+                <!-- GIAO DIỆN 1B: FORM CHỈNH SỬA (ẨN MẶC ĐỊNH) -->
+                <form id="profile-form" class="profile-form hidden">
+                    <div class="form-group">
+                        <label for="fullname">Họ và tên</label>
+                        <input type="text" id="fullname" placeholder="Nhập họ và tên của bạn" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="phone">Số điện thoại</label>
+                        <input type="tel" id="phone" placeholder="Nhập số điện thoại" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="dob">Ngày sinh</label>
+                        <input type="date" id="dob">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="address">Địa chỉ</label>
+                        <input type="text" id="address" placeholder="Nhập địa chỉ nhà riêng">
+                    </div>
+
+                    <div class="form-actions">
+                        <button type="submit" class="btn-primary">Lưu Lại</button>
+                        <button type="button" id="btn-cancel" class="btn-secondary">Hủy</button>
+                    </div>
+                </form>
+
+                <!-- KHUNG HIỂN THỊ DỊCH VỤ ĐÃ ĐĂNG KÝ (CÓ NÚT THU HỒI) -->
+                <div class="registered-services-box" style="margin-top: 24px; border-top: 1px dashed var(--border-color); padding-top: 16px;">
+                    <h3 style="font-size: 1rem; font-weight: 600; color: var(--text-main); margin-bottom: 10px;">Các dịch vụ đã đăng ký:</h3>
+                    <ul id="my-booked-services-list" style="padding-left: 0; list-style: none; color: var(--text-muted); font-size: 0.95rem; display: flex; flex-direction: column; gap: 8px;">
+                        <li>Chưa có dịch vụ nào được đăng ký.</li>
+                    </ul>
+                </div>
+
+            </div>
         </section>
 
+        <!-- ================= MỤC 2: 9 DỊCH VỤ NỔI BẬT ================= -->
         <section id="dich-vu" class="card">
-            <h2 class="card-title">Dịch Vụ Của Tôi</h2>
-            <div class="card-content"></div>
+            <h2 class="card-title">Danh Sách Dịch Vụ</h2>
+            <div class="card-content">
+                
+                <!-- GIAO DIỆN 2A: LƯỚI 9 DỊCH VỤ -->
+                <div id="services-list-view" class="services-grid">
+                    
+                    <div class="service-item">
+                        <div class="service-info">
+                            <h3 class="service-name">Tắm & Massage Bé</h3>
+                            <p class="service-desc">Giúp bé thư giãn, ngủ ngon, kích thích tiêu hóa và phát triển cơ xương an toàn tại nhà.</p>
+                        </div>
+                        <button class="btn-primary btn-detail-trigger" data-service="tam-be">Xem chi tiết</button>
+                    </div>
+
+                    <div class="service-item">
+                        <div class="service-info">
+                            <h3 class="service-name">Chăm Sóc Mẹ Sau Sinh</h3>
+                            <p class="service-desc">Phục hồi sức khỏe, massage body giảm nhức mỏi, xông hơi và chăm sóc da chuyên sâu.</p>
+                        </div>
+                        <button class="btn-primary btn-detail-trigger" data-service="me-sau-sinh">Xem chi tiết</button>
+                    </div>
+
+                    <div class="service-item">
+                        <div class="service-info">
+                            <h3 class="service-name">Thông Tắc Tia Sữa</h3>
+                            <p class="service-desc">Xử lý nhanh chóng, triệt để tình trạng căng tức sữa, tắc tia sữa giúp mẹ cho con bú thuận lợi.</p>
+                        </div>
+                        <button class="btn-primary btn-detail-trigger" data-service="thong-sua">Xem chi tiết</button>
+                    </div>
+
+                    <div class="service-item">
+                        <div class="service-info">
+                            <h3 class="service-name">Bơi Thủy Liệu (Hydrotherapy)</h3>
+                            <p class="service-desc">Giúp bé vận động từ sớm, phát triển chiều cao, tăng cường hệ miễn dịch và sự cứng cáp.</p>
+                        </div>
+                        <button class="btn-primary btn-detail-trigger" data-service="boi-thuy-lieu">Xem chi tiết</button>
+                    </div>
+
+                    <div class="service-item">
+                        <div class="service-info">
+                            <h3 class="service-name">Massage Bầu Thư Giãn</h3>
+                            <p class="service-desc">Giảm đau lưng, phù nề chân tay, giải tỏa căng thẳng cho mẹ trong suốt thai kỳ.</p>
+                        </div>
+                        <button class="btn-primary btn-detail-trigger" data-service="massage-bau">Xem chi tiết</button>
+                    </div>
+
+                    <div class="service-item">
+                        <div class="service-info">
+                            <h3 class="service-name">Khám Sức Khỏe Trẻ Sơ Sinh</h3>
+                            <p class="service-desc">Bác sĩ nhi khoa thăm khám tổng quát tận nhà, theo dõi sát sao biểu đồ phát triển của bé.</p>
+                        </div>
+                        <button class="btn-primary btn-detail-trigger" data-service="kham-nhi">Xem chi tiết</button>
+                    </div>
+
+                    <div class="service-item">
+                        <div class="service-info">
+                            <h3 class="service-name">Tư Vấn Dinh Dưỡng Ăn Dặm</h3>
+                            <p class="service-desc">Lên thực đơn khoa học, phù hợp theo từng giai đoạn phát triển hệ tiêu hóa của trẻ.</p>
+                        </div>
+                        <button class="btn-primary btn-detail-trigger" data-service="dinh-duong">Xem chi tiết</button>
+                    </div>
+
+                    <div class="service-item">
+                        <div class="service-info">
+                            <h3 class="service-name">Xông Hơi Phục Hồi Sau Sinh</h3>
+                            <p class="service-desc">Liệu pháp thảo dược cổ truyền giúp mẹ đào thải độc tố, làm sạch và sáng hồng làn da.</p>
+                        </div>
+                        <button class="btn-primary btn-detail-trigger" data-service="xong-hoi">Xem chi tiết</button>
+                    </div>
+
+                    <div class="service-item">
+                        <div class="service-info">
+                            <h3 class="service-name">Thuê Bảo Mẫu Chăm Trẻ</h3>
+                            <p class="service-desc">Cung cấp nhân sự uy tín, tận tâm hỗ trợ gia đình chăm sóc và trông nom bé theo giờ.</p>
+                        </div>
+                        <button class="btn-primary btn-detail-trigger" data-service="bao-mau">Xem chi tiết</button>
+                    </div>
+
+                </div>
+
+                <!-- GIAO DIỆN 2B: CHI TIẾT TỪNG DỊCH VỤ (ẨN MẶC ĐỊNH) -->
+                <div id="service-detail-view" class="hidden">
+                    <button type="button" id="btn-back" class="btn-secondary" style="margin-bottom: 16px;">Quay lại danh sách</button>
+                    
+                    <div class="detail-box">
+                        <h3 id="detail-title" style="color: var(--primary); margin-bottom: 12px; font-size: 1.25rem;">Tên dịch vụ</h3>
+                        <p id="detail-description" style="color: var(--text-main); margin-bottom: 16px; line-height: 1.6;">Mô tả chi tiết dịch vụ...</p>
+                        
+                        <div class="benefits-box">
+                            <p style="font-weight: 600; margin-bottom: 8px;">Quyền lợi gói dịch vụ:</p>
+                            <ul id="detail-benefits" style="padding-left: 20px; color: var(--text-muted); font-size: 0.95rem; line-height: 1.6;">
+                                <!-- Quyền lợi chèn tự động -->
+                            </ul>
+                        </div>
+
+                        <button type="button" id="btn-book-service" class="btn-primary">Xác nhận đăng ký dịch vụ này</button>
+                    </div>
+                </div>
+
+            </div>
         </section>
 
+        <!-- ================= MỤC 3: LIÊN HỆ & HỖ TRỢ ================= -->
         <section id="lien-he" class="card">
-            <h2 class="card-title">Liên Hệ & Hỗ Trợ</h2>
-            <div class="card-content"></div>
+            <h2 class="card-title">Liên Hệ & Hỗ Trợ Khách Hàng</h2>
+            <div class="card-content">
+                <div style="display: flex; flex-direction: column; gap: 16px; max-width: 600px;">
+                    <p style="color: var(--text-muted); font-size: 0.95rem;">
+                        Quý khách cần tư vấn trực tiếp hoặc đặt lịch các dịch vụ Mẹ & Bé, xin vui lòng liên hệ qua các thông tin dưới đây:
+                    </p>
+                    
+                    <div style="display: flex; flex-direction: column; gap: 10px; font-size: 0.95rem;">
+                        <div><strong>Địa chỉ:</strong> Đường D5, Hòa Thuận, Trà Vinh</div>
+                        <div><strong>Hotline:</strong> 0326483623</div>
+                        <div><strong>Email:</strong> cskh@mevabe.vn</div>
+                        <div><strong>Giờ làm việc:</strong> 08:00 - 20:00 (Thứ 2 - Chủ Nhật)</div>
+                    </div>
+
+                    <div style="display: flex; gap: 10px; margin-top: 8px;">
+                        <a href="tel:0326483623" class="btn-primary" style="text-decoration: none; text-align: center; flex: 1;">Gọi Hotline</a>
+                        <a href="https://zalo.me/0326483623" target="_blank" class="btn-secondary" style="text-decoration: none; text-align: center; flex: 1; background-color: #0068ff; color: #fff;">Chat Zalo</a>
+                    </div>
+                </div>
+            </div>
         </section>
+
     </main>
 
+    <script src="../../js/js-nhom-nguoi-dung/khachhang.js"></script>
 </body>
 </html>
