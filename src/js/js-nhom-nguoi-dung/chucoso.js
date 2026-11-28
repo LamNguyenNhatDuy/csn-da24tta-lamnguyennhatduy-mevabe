@@ -72,39 +72,82 @@ function syncStaffWithUsers() {
     }
 }
 
+function debounceOwner(fn, delayMs) {
+    let timer = null;
+    return function () {
+        const ctx = this;
+        const args = arguments;
+        clearTimeout(timer);
+        timer = setTimeout(function () {
+            fn.apply(ctx, args);
+        }, delayMs);
+    };
+}
+
+function getSearchInputQuery(inputId) {
+    const el = document.getElementById(inputId);
+    return el ? el.value.trim().toLowerCase() : "";
+}
+
+function updateCounterBadge(id, value) {
+    const el = document.getElementById(id);
+    if (el) el.textContent = String(value);
+}
+
+function updateOwnerDatabasePill() {
+    const pill = document.getElementById("owner-db-status");
+    if (!pill) return;
+    const connected = typeof AppData.isDatabaseConnected === "function" && AppData.isDatabaseConnected();
+    pill.textContent = connected ? "● MySQL Real-time" : "● Chế độ trình duyệt";
+    pill.classList.toggle("is-mysql", connected);
+}
+
 function renderStaffTable() {
     const tbody = document.getElementById("staff-table-body");
     if (!tbody) return;
 
     syncStaffWithUsers();
+    updateCounterBadge("side-staff-count", staffList.length);
 
-    tbody.innerHTML = "";
-    if (staffList.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: var(--text-muted); padding: 16px;">Chưa có nhân viên nào trong hệ thống. Hãy bấm "+ Mở Tài Khoản Nhân Viên" để tạo tài khoản.</td></tr>`;
+    const query = getSearchInputQuery("staff-table-search");
+    const rows = [];
+    staffList.forEach((staff, index) => {
+        if (!staff) return;
+        if (query) {
+            const hay = `${staff.name || ""} ${staff.email || ""} ${staff.phone || ""} ${staff.role || ""} ${staff.area || ""}`.toLowerCase();
+            if (hay.indexOf(query) === -1) return;
+        }
+        rows.push({ staff, index });
+    });
+    updateCounterBadge("staff-count-pill", query ? `${rows.length}/${staffList.length} nhân sự` : `${staffList.length} nhân sự`);
+
+    if (rows.length === 0) {
+        const msg = staffList.length === 0
+            ? 'Chưa có nhân viên nào trong hệ thống. Hãy bấm "+ Mở Tài Khoản Nhân Viên" để tạo tài khoản.'
+            : "Không có nhân viên nào khớp với từ khóa tìm kiếm.";
+        tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: var(--text-muted); padding: 18px;">${msg}</td></tr>`;
         return;
     }
 
-    staffList.forEach((staff, index) => {
-        tbody.innerHTML += `
-            <tr>
-                <td>
-                    <div class="staff-name-cell">
-                        ${AppUI.avatarHtml(staff.avatar, staff.name, 32)}
-                        <span>${AppUI.escapeHtml(staff.name || "Chưa cập nhật")}</span>
-                    </div>
-                </td>
-                <td>${AppUI.escapeHtml(staff.email || "Chưa cấp TK")}</td>
-                <td>${AppUI.escapeHtml(staff.phone || "Chưa cập nhật")}</td>
-                <td>${AppUI.escapeHtml(staff.role || "Chưa cập nhật")}</td>
-                <td>${AppUI.escapeHtml(staff.area || "Chưa cập nhật")}</td>
-                <td style="text-align: center; white-space: nowrap;">
-                    <button class="btn-sm" style="background: #e0f2fe; color: #0284c7;" onclick="viewStaffDetail(${index})">Xem dữ liệu</button>
-                    <button class="btn-sm btn-edit" onclick="editStaff(${index})">Sửa</button>
-                    <button class="btn-sm btn-delete" onclick="deleteStaff(${index})">Xóa</button>
-                </td>
-            </tr>
-        `;
-    });
+    tbody.innerHTML = rows.map(({ staff, index }) => `
+        <tr>
+            <td>
+                <div class="staff-name-cell">
+                    ${AppUI.avatarHtml(staff.avatar, staff.name, 34)}
+                    <span>${AppUI.escapeHtml(staff.name || "Chưa cập nhật")}</span>
+                </div>
+            </td>
+            <td>${AppUI.escapeHtml(staff.email || "Chưa cấp TK")}</td>
+            <td>${AppUI.escapeHtml(staff.phone || "Chưa cập nhật")}</td>
+            <td>${AppUI.escapeHtml(staff.role || "Chưa cập nhật")}</td>
+            <td>${AppUI.escapeHtml(staff.area || "Chưa cập nhật")}</td>
+            <td style="text-align: center; white-space: nowrap;">
+                <button class="btn-sm" style="background: #e0f2fe; color: #0284c7;" onclick="viewStaffDetail(${index})">Xem dữ liệu</button>
+                <button class="btn-sm btn-edit" onclick="editStaff(${index})">Sửa</button>
+                <button class="btn-sm btn-delete" onclick="deleteStaff(${index})">Xóa</button>
+            </td>
+        </tr>
+    `).join("");
 }
 
 function isShiftOfStaff(shift, staff) {
@@ -332,21 +375,56 @@ function renderServiceImagePreview(src, name, fallbackMeta) {
     );
 }
 
+/* Đồng bộ chỉ số Hero và Sidebar theo báo cáo */
+function updateOwnerOverviewStats(data) {
+    if (!data) return;
+    const servicesCount = AppData.loadServices().length;
+    const productsCount = Array.isArray(data.allProducts) ? data.allProducts.length : AppData.loadProducts().length;
+
+    updateCounterBadge("hero-rev-value", formatCatalogVnd(data.productRevenue));
+    updateCounterBadge("hero-orders-pending", `${data.pendingOrderCount} đơn`);
+    updateCounterBadge("hero-staff-count", `${data.totalStaff} người`);
+    updateCounterBadge("hero-catalog-count", `${productsCount} SP · ${servicesCount} DV`);
+
+    updateCounterBadge("side-staff-count", data.totalStaff);
+    updateCounterBadge("side-service-count", servicesCount);
+    updateCounterBadge("side-product-count", productsCount);
+
+    const pendingBadge = document.getElementById("side-pending-badge");
+    if (pendingBadge) {
+        pendingBadge.textContent = String(data.pendingOrderCount);
+        pendingBadge.classList.toggle("hidden", !(data.pendingOrderCount > 0));
+    }
+}
+
+/* Bảng dịch vụ với lọc nhanh và render theo batch */
 function renderServicesTable() {
     const tbody = document.getElementById("services-table-body");
     if (!tbody) return;
 
     const services = AppData.loadServices();
-    tbody.innerHTML = "";
+    const query = getSearchInputQuery("service-table-search");
+    const filtered = !query
+        ? services
+        : services.filter(svc => [svc.name, svc.category, svc.target, svc.location, svc.specBadge, svc.saleTag]
+            .join(" ").toLowerCase().includes(query));
+
+    updateCounterBadge("side-service-count", services.length);
+    updateCounterBadge("service-count-pill", query ? `${filtered.length}/${services.length} dịch vụ` : `${services.length} dịch vụ`);
 
     if (services.length === 0) {
         tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: var(--text-muted); padding: 16px;">Chưa có dịch vụ nào. Hãy bấm "+ Thêm Dịch Vụ" để tạo mới.</td></tr>`;
         return;
     }
 
-    services.forEach(svc => {
+    if (filtered.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: var(--text-muted); padding: 16px;">Không tìm thấy dịch vụ phù hợp với "${AppUI.escapeHtml(query)}".</td></tr>`;
+        return;
+    }
+
+    tbody.innerHTML = filtered.map(svc => {
         const thumbSrc = svc.image || AppData.buildServiceIllustrationSvg(svc);
-        const thumbHtml = `<span class="service-thumb"><img src="${AppUI.escapeHtml(thumbSrc)}" alt="${AppUI.escapeHtml(svc.name)}"></span>`;
+        const thumbHtml = `<span class="service-thumb"><img src="${AppUI.escapeHtml(thumbSrc)}" alt="${AppUI.escapeHtml(svc.name)}" loading="lazy" decoding="async"></span>`;
         const benefitCount = Array.isArray(svc.benefits) ? svc.benefits.length : 0;
         const metaParts = [svc.specBadge, svc.saleTag].filter(Boolean).join(" · ");
         const priceLabel = svc.price > 0 ? formatCatalogVnd(svc.price) : "Liên hệ";
@@ -357,7 +435,7 @@ function renderServicesTable() {
             ? `<span class="product-badge-mini">-${svc.discount}%</span>`
             : "";
 
-        tbody.innerHTML += `
+        return `
             <tr>
                 <td>
                     <div class="staff-name-cell">
@@ -385,7 +463,7 @@ function renderServicesTable() {
                 </td>
             </tr>
         `;
-    });
+    }).join("");
 }
 
 window.viewServiceDetail = function(serviceId) {
@@ -523,22 +601,38 @@ function renderProductImagePreview(src, name, fallbackMeta) {
     );
 }
 
+/* Bảng sản phẩm với lọc nhanh và render theo batch */
 function renderProductsTable() {
     const tbody = document.getElementById("products-table-body");
     if (!tbody) return;
 
     const products = AppData.loadProducts();
-    tbody.innerHTML = "";
+    const query = getSearchInputQuery("product-table-search");
+    const filtered = !query
+        ? products
+        : products.filter(prod => {
+            const codeStr = AppData.formatProductCode(prod.code || prod.id);
+            return [codeStr, prod.name, prod.category, prod.age, prod.type, prod.specBadge, prod.saleTag]
+                .join(" ").toLowerCase().includes(query);
+        });
+
+    updateCounterBadge("side-product-count", products.length);
+    updateCounterBadge("product-count-pill", query ? `${filtered.length}/${products.length} sản phẩm` : `${products.length} sản phẩm`);
 
     if (products.length === 0) {
         tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: var(--text-muted); padding: 16px;">Chưa có sản phẩm nào. Hãy bấm "+ Thêm Sản Phẩm" để tạo mới.</td></tr>`;
         return;
     }
 
-    products.forEach(prod => {
+    if (filtered.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: var(--text-muted); padding: 16px;">Không tìm thấy sản phẩm phù hợp với "${AppUI.escapeHtml(query)}".</td></tr>`;
+        return;
+    }
+
+    tbody.innerHTML = filtered.map(prod => {
         const codeStr = AppData.formatProductCode(prod.code || prod.id);
         const thumbHtml = prod.image
-            ? `<span class="service-thumb"><img src="${AppUI.escapeHtml(prod.image)}" alt="${AppUI.escapeHtml(prod.name)}"></span>`
+            ? `<span class="service-thumb"><img src="${AppUI.escapeHtml(prod.image)}" alt="${AppUI.escapeHtml(prod.name)}" loading="lazy" decoding="async"></span>`
             : `<span class="service-thumb">Ảnh</span>`;
         const metaParts = [prod.specBadge, prod.saleTag].filter(Boolean).join(" · ");
         const origHtml = prod.originalPrice > prod.price
@@ -554,7 +648,7 @@ function renderProductsTable() {
             ? `<span class="product-badge-mini gift">${AppUI.escapeHtml(prod.gift)}</span>`
             : "";
 
-        tbody.innerHTML += `
+        return `
             <tr>
                 <td>
                     <div class="staff-name-cell">
@@ -588,7 +682,7 @@ function renderProductsTable() {
                 </td>
             </tr>
         `;
-    });
+    }).join("");
 }
 
 window.viewProductDetail = function(productId) {
@@ -1425,7 +1519,7 @@ function renderReportKpiDetailContent() {
             ["STT", "Sản Phẩm", "Danh Mục &amp; Phân Loại", "Đơn Giá", "Đã Bán (Trong Kỳ)", "Doanh Thu", "Thao Tác"],
             rows.map((p, idx) => {
                 const thumbHtml = p.image
-                    ? `<span class="service-thumb"><img src="${AppUI.escapeHtml(p.image)}" alt="${AppUI.escapeHtml(p.name)}"></span>`
+                    ? `<span class="service-thumb"><img src="${AppUI.escapeHtml(p.image)}" alt="${AppUI.escapeHtml(p.name)}" loading="lazy" decoding="async"></span>`
                     : `<span class="service-thumb">SP</span>`;
                 const safeIdArg = AppUI.escapeHtml(JSON.stringify(p.id || ""));
                 const actionHtml = p.inCatalog
@@ -1807,11 +1901,15 @@ function renderReport() {
     if (!periodSelect || !kpiContainer || !servicesChart || !shiftChart || !staffTableContainer) return;
 
     const data = computeReportData(periodSelect.value);
+    updateOwnerOverviewStats(data);
 
     kpiContainer.innerHTML = `
         <div class="report-kpi-card" data-kpi="staff" role="button" tabindex="0" title="Bấm để xem chi tiết nhân viên">
             <div>
-                <div class="report-kpi-label">Tổng nhân viên</div>
+                <div class="report-kpi-top">
+                    <div class="report-kpi-label">Tổng nhân viên</div>
+                    <span class="report-kpi-dot" style="background: #ff4d8d;"></span>
+                </div>
                 <div class="report-kpi-value">${data.totalStaff}</div>
                 <div class="report-kpi-sub">Đang có trong danh sách cơ sở</div>
             </div>
@@ -1819,7 +1917,10 @@ function renderReport() {
         </div>
         <div class="report-kpi-card" data-kpi="customers" role="button" tabindex="0" title="Bấm để xem chi tiết khách hàng &amp; tài khoản">
             <div>
-                <div class="report-kpi-label">Khách hàng</div>
+                <div class="report-kpi-top">
+                    <div class="report-kpi-label">Khách hàng</div>
+                    <span class="report-kpi-dot" style="background: #0284c7;"></span>
+                </div>
                 <div class="report-kpi-value">${data.customerCount}</div>
                 <div class="report-kpi-sub">Tài khoản khách hàng đã đăng ký</div>
             </div>
@@ -1827,7 +1928,10 @@ function renderReport() {
         </div>
         <div class="report-kpi-card" data-kpi="bookings" role="button" tabindex="0" title="Bấm để xem chi tiết lượt đăng ký dịch vụ">
             <div>
-                <div class="report-kpi-label">Lượt đăng ký dịch vụ</div>
+                <div class="report-kpi-top">
+                    <div class="report-kpi-label">Lượt đăng ký dịch vụ</div>
+                    <span class="report-kpi-dot" style="background: #7c3aed;"></span>
+                </div>
                 <div class="report-kpi-value">${data.bookingCount}</div>
                 <div class="report-kpi-sub">Trong kỳ báo cáo đang chọn</div>
             </div>
@@ -1835,7 +1939,10 @@ function renderReport() {
         </div>
         <div class="report-kpi-card" data-kpi="orders" role="button" tabindex="0" title="Bấm để xem chi tiết &amp; xử lý đơn hàng sản phẩm">
             <div>
-                <div class="report-kpi-label">Đơn hàng sản phẩm</div>
+                <div class="report-kpi-top">
+                    <div class="report-kpi-label">Đơn hàng sản phẩm</div>
+                    <span class="report-kpi-dot" style="background: #d97706;"></span>
+                </div>
                 <div class="report-kpi-value">${data.orderCount}</div>
                 <div class="report-kpi-sub">${data.confirmedOrderCount} xác nhận · ${data.pendingOrderCount} chờ · ${data.recalledOrderCount} thu hồi</div>
             </div>
@@ -1843,7 +1950,10 @@ function renderReport() {
         </div>
         <div class="report-kpi-card" data-kpi="products" role="button" tabindex="0" title="Bấm để xem thống kê chi tiết từng sản phẩm">
             <div>
-                <div class="report-kpi-label">Doanh thu sản phẩm</div>
+                <div class="report-kpi-top">
+                    <div class="report-kpi-label">Doanh thu sản phẩm</div>
+                    <span class="report-kpi-dot" style="background: #16a34a;"></span>
+                </div>
                 <div class="report-kpi-value" style="color: var(--primary);">${formatCatalogVnd(data.productRevenue)}</div>
                 <div class="report-kpi-sub">${data.productUnitsSold} sản phẩm đã bán · ${data.allProducts.length} mẫu SP</div>
             </div>
@@ -1851,7 +1961,10 @@ function renderReport() {
         </div>
         <div class="report-kpi-card" data-kpi="shifts" role="button" tabindex="0" title="Bấm để xem chi tiết các ca trực">
             <div>
-                <div class="report-kpi-label">Ca trực trong kỳ</div>
+                <div class="report-kpi-top">
+                    <div class="report-kpi-label">Ca trực trong kỳ</div>
+                    <span class="report-kpi-dot" style="background: #0d9488;"></span>
+                </div>
                 <div class="report-kpi-value">${data.shiftCount}</div>
                 <div class="report-kpi-sub">${formatHours(data.totalShiftHours)} giờ · ${data.completedShifts} hoàn thành · ${data.upcomingShifts} sắp tới</div>
             </div>
@@ -1934,7 +2047,7 @@ function renderReport() {
                     <tbody>
                         ${data.productCatalogStats.map(p => {
                             const thumbHtml = p.image
-                                ? `<span class="service-thumb"><img src="${AppUI.escapeHtml(p.image)}" alt="${AppUI.escapeHtml(p.name)}"></span>`
+                                ? `<span class="service-thumb"><img src="${AppUI.escapeHtml(p.image)}" alt="${AppUI.escapeHtml(p.name)}" loading="lazy" decoding="async"></span>`
                                 : `<span class="service-thumb">SP</span>`;
                             return `
                                 <tr>
@@ -2593,6 +2706,7 @@ document.addEventListener("DOMContentLoaded", function () {
             const imageLabel = isCustomUploadedImage(pendingServiceImage) ? "Ảnh tùy chỉnh đã tải lên" : "Ảnh minh họa mặc định";
             pendingServiceImage = "";
             renderServicesTable();
+            renderReport();
             serviceModal.classList.add("hidden");
 
             AppUI.success({
@@ -2820,39 +2934,127 @@ document.addEventListener("DOMContentLoaded", function () {
         });
     }
 
-    /* Báo cáo & thống kê */
+    /* Báo cáo, tìm kiếm và điều hướng nhanh */
     const reportPeriod = document.getElementById("report-period");
     const btnReportRefresh = document.getElementById("btn-report-refresh");
+    const btnHeaderRefresh = document.getElementById("btn-header-refresh");
     const btnReportExport = document.getElementById("btn-report-export");
+    const btnHeroExport = document.getElementById("btn-hero-export");
     const btnReportPrint = document.getElementById("btn-report-print");
+
+    function refreshOwnerWorkspace() {
+        if (typeof AppData.refreshFromDatabase === "function") {
+            AppData.refreshFromDatabase();
+            staffList = AppData.loadStaff();
+        }
+        updateOwnerDatabasePill();
+        renderStaffTable();
+        renderServicesTable();
+        renderProductsTable();
+        renderReport();
+    }
 
     if (reportPeriod) {
         reportPeriod.addEventListener("change", renderReport);
     }
-
     if (btnReportRefresh) {
-        btnReportRefresh.addEventListener("click", function () {
-            if (typeof AppData.refreshFromDatabase === "function") {
-                AppData.refreshFromDatabase();
-                staffList = AppData.loadStaff();
-            }
-            renderStaffTable();
-            renderServicesTable();
-            renderProductsTable();
-            renderReport();
-        });
+        btnReportRefresh.addEventListener("click", refreshOwnerWorkspace);
     }
-
+    if (btnHeaderRefresh) {
+        btnHeaderRefresh.addEventListener("click", refreshOwnerWorkspace);
+    }
     if (btnReportExport) {
         btnReportExport.addEventListener("click", exportReportCsv);
     }
-
+    if (btnHeroExport) {
+        btnHeroExport.addEventListener("click", exportReportCsv);
+    }
     if (btnReportPrint) {
         btnReportPrint.addEventListener("click", function () {
             window.print();
         });
     }
 
+    /* Bộ lọc từng bảng và tìm kiếm toàn trang */
+    const tableFilterPairs = [
+        ["staff-table-search", renderStaffTable],
+        ["service-table-search", renderServicesTable],
+        ["product-table-search", renderProductsTable]
+    ];
+    tableFilterPairs.forEach(([inputId, renderFn]) => {
+        const el = document.getElementById(inputId);
+        if (el) {
+            el.addEventListener("input", debounceOwner(renderFn, 120));
+        }
+    });
+
+    const ownerGlobalSearch = document.getElementById("owner-global-search");
+    const ownerGlobalSearchForm = document.getElementById("owner-global-search-form");
+    if (ownerGlobalSearch) {
+        ownerGlobalSearch.addEventListener("input", debounceOwner(function () {
+            const val = ownerGlobalSearch.value || "";
+            tableFilterPairs.forEach(([inputId]) => {
+                const el = document.getElementById(inputId);
+                if (el) el.value = val;
+            });
+            renderStaffTable();
+            renderServicesTable();
+            renderProductsTable();
+        }, 140));
+    }
+    if (ownerGlobalSearchForm) {
+        ownerGlobalSearchForm.addEventListener("submit", function (e) {
+            e.preventDefault();
+            const q = ownerGlobalSearch ? ownerGlobalSearch.value.trim() : "";
+            openReportKpiDetail(activeReportKpiKey || "orders");
+            const modalSearch = document.getElementById("report-detail-search");
+            if (modalSearch && q) {
+                modalSearch.value = q;
+                renderReportKpiDetailContent();
+            }
+        });
+    }
+
+    /* Điều hướng sidebar và nút thêm nhanh */
+    const sidebarNavItems = document.querySelectorAll(".owner-sidebar [data-scroll-target]");
+    document.querySelectorAll("[data-scroll-target]").forEach(btn => {
+        btn.addEventListener("click", function (e) {
+            const targetId = btn.getAttribute("data-scroll-target");
+            const targetEl = targetId ? document.getElementById(targetId) : null;
+            if (!targetEl) return;
+            e.preventDefault();
+            targetEl.scrollIntoView({ behavior: "smooth", block: "start" });
+            sidebarNavItems.forEach(item => {
+                item.classList.toggle("active", item.getAttribute("data-scroll-target") === targetId);
+            });
+        });
+    });
+
+    document.querySelectorAll("[data-open-kpi]").forEach(btn => {
+        btn.addEventListener("click", function () {
+            const kpiKey = btn.getAttribute("data-open-kpi") || "orders";
+            openReportKpiDetail(kpiKey);
+        });
+    });
+
+    [
+        ["btn-side-add-staff", "btn-open-staff-modal"],
+        ["btn-hero-add-staff", "btn-open-staff-modal"],
+        ["btn-side-add-service", "btn-open-service-modal"],
+        ["btn-hero-add-service", "btn-open-service-modal"],
+        ["btn-side-add-product", "btn-open-product-modal"],
+        ["btn-hero-add-product", "btn-open-product-modal"]
+    ].forEach(([triggerId, targetBtnId]) => {
+        const triggerEl = document.getElementById(triggerId);
+        if (triggerEl) {
+            triggerEl.addEventListener("click", function () {
+                const targetBtn = document.getElementById(targetBtnId);
+                if (targetBtn) targetBtn.click();
+            });
+        }
+    });
+
+    updateOwnerDatabasePill();
     renderReport();
 
     const reportDetailModal = document.getElementById("report-detail-modal");
@@ -2882,7 +3084,7 @@ document.addEventListener("DOMContentLoaded", function () {
     document.addEventListener("keydown", function (e) {
         if (e.key !== "Escape") return;
         if (document.querySelector(".app-modal-overlay")) return;
-        const topModals = ["customer-admin-modal", "booking-admin-modal", "order-admin-modal", "shift-admin-modal", "product-modal", "staff-modal"];
+        const topModals = ["customer-admin-modal", "booking-admin-modal", "order-admin-modal", "shift-admin-modal", "service-modal", "product-modal", "staff-modal"];
         for (let i = 0; i < topModals.length; i++) {
             const el = document.getElementById(topModals[i]);
             if (el && !el.classList.contains("hidden")) {
@@ -2903,7 +3105,7 @@ document.addEventListener("DOMContentLoaded", function () {
     });
 
     if (reportDetailSearch) {
-        reportDetailSearch.addEventListener("input", renderReportKpiDetailContent);
+        reportDetailSearch.addEventListener("input", debounceOwner(renderReportKpiDetailContent, 120));
     }
 
     /* Sửa khách hàng */
