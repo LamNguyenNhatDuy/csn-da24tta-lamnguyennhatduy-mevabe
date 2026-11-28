@@ -17,29 +17,7 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    /* ================= 0. POPUP THÔNG BÁO DÙNG APPUI ================= */
-    function showCustomAlert(title, message, callback) {
-        const isSuccess = title.toLowerCase().indexOf('thành công') !== -1;
-        const isError = title.toLowerCase().indexOf('lỗi') !== -1;
-        const fn = isSuccess ? AppUI.success : (isError ? AppUI.error : AppUI.warning);
-        fn({
-            title: title,
-            message: message,
-            onClose: callback
-        });
-    }
-
-    function showCustomConfirm(title, message, onConfirm) {
-        AppUI.confirm({
-            title: title,
-            message: message,
-            danger: true,
-            onConfirm: onConfirm
-        });
-    }
-
-
-    /* ================= 1. XỬ LÝ THÔNG TIN NHÂN VIÊN & ẢNH ĐẠI DIỆN ================= */
+    /* Hồ sơ nhân viên */
     const staffDisplay = document.getElementById('staff-display');
     const staffForm = document.getElementById('staff-form');
     const btnEditStaff = document.getElementById('btn-edit-staff');
@@ -74,12 +52,7 @@ document.addEventListener('DOMContentLoaded', function() {
             u && u.role === 'nhanvien' && (u.email || '').toLowerCase() === emailLower
         ) || {};
 
-        let staffList = [];
-        try {
-            staffList = JSON.parse(localStorage.getItem('facilityStaffList')) || [];
-        } catch (err) {
-            staffList = [];
-        }
+        const staffList = AppData.loadStaff();
 
         const staffRecord = staffList.find(s =>
             s && (
@@ -115,13 +88,8 @@ document.addEventListener('DOMContentLoaded', function() {
             if (!AppData.saveUsers(users)) return false;
         }
 
-        // 2. Đồng bộ sang facilityStaffList
-        let staffList = [];
-        try {
-            staffList = JSON.parse(localStorage.getItem('facilityStaffList')) || [];
-        } catch (err) {
-            staffList = [];
-        }
+        // 2. Đồng bộ sang facilityStaffList (CSDL bảng staff)
+        const staffList = AppData.loadStaff();
 
         const sIdx = staffList.findIndex(s =>
             s && (
@@ -143,11 +111,13 @@ document.addEventListener('DOMContentLoaded', function() {
             staffList.push(staffEntry);
         }
 
+        if (!AppData.saveStaff(staffList)) {
+            return false;
+        }
         try {
-            localStorage.setItem('facilityStaffList', JSON.stringify(staffList));
             localStorage.setItem('nhanVienProfile', JSON.stringify(staffEntry));
         } catch (err) {
-            return false;
+            // ignore profile cache warning
         }
 
         // 3. Cập nhật tên/SĐT trên các ca trực đã đăng ký của chính nhân viên này
@@ -316,7 +286,7 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
 
-    /* ================= 2. LỊCH CA TRỰC THEO TUẦN THẬT & BẢNG CHỌN NHIỀU CA ================= */
+    /* Lịch ca trực */
     const timetableContainer = document.getElementById('weekly-timetable-container');
     const shiftWeekSummary = document.getElementById('shift-week-summary');
     const filterYear = document.getElementById('filter-year');
@@ -571,10 +541,13 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (targetIndex === -1) return;
 
                 const target = currentShifts[targetIndex];
-                showCustomConfirm(
-                    'Xác nhận hủy ca trực',
-                    `Bạn có chắc chắn muốn hủy ${target.time} vào ${target.day} (${AppData.formatDate(target.date)}) không?`,
-                    function() {
+                AppUI.confirm({
+                    title: 'Xác nhận hủy ca trực',
+                    message: `Bạn có chắc chắn muốn hủy ${target.time} vào ${target.day} (${AppData.formatDate(target.date)}) không?`,
+                    danger: true,
+                    confirmText: 'Hủy ca',
+                    cancelText: 'Giữ lại',
+                    onConfirm: function() {
                         const latest = AppData.loadShifts();
                         const idx = latest.findIndex(item => item.id === shiftId);
                         if (idx === -1) return;
@@ -599,7 +572,7 @@ document.addEventListener('DOMContentLoaded', function() {
                             ]
                         });
                     }
-                );
+                });
             });
         });
     }
@@ -862,7 +835,7 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
 
-    /* ================= 3. XỬ LÝ QUẢN LÝ KHÁCH HÀNG CỤ THỂ & XÁC NHẬN ĐƠN / DỊCH VỤ ================= */
+    /* Quản lý khách hàng & đơn hàng */
     const customerListContainer = document.getElementById('customer-list-container');
     const staffCustKpis = document.getElementById('staff-cust-kpis');
     const staffCustTabs = document.getElementById('staff-cust-tabs');
@@ -876,6 +849,33 @@ document.addEventListener('DOMContentLoaded', function() {
         return Number(amount || 0).toLocaleString('vi-VN') + 'đ';
     }
 
+    function getRequestStatusFlags(item) {
+        const isRecalled = Boolean(item && (item.status === 'recalled' || item.recalledBy));
+        const isConfirmed = Boolean(item && !isRecalled && (item.status === 'confirmed' || item.confirmedBy));
+        return { isRecalled: isRecalled, isConfirmed: isConfirmed, isPending: !isRecalled && !isConfirmed };
+    }
+
+    function getRequestStore(kind) {
+        return kind === 'service'
+            ? { load: AppData.loadServiceBookings, save: AppData.saveServiceBookings }
+            : { load: AppData.loadProductOrders, save: AppData.saveProductOrders };
+    }
+
+    function updateRequestRecord(kind, realIdx, buildPatchFn, saveErrMessage) {
+        const store = getRequestStore(kind);
+        const latest = store.load();
+        const target = latest[realIdx];
+        if (!target) return null;
+        const patch = buildPatchFn(target);
+        if (!patch) return { aborted: true };
+        latest[realIdx] = Object.assign({}, target, patch);
+        if (!store.save(latest)) {
+            AppUI.error({ title: 'Lỗi lưu dữ liệu', message: saveErrMessage });
+            return null;
+        }
+        return latest[realIdx];
+    }
+
     function getStaffConfirmerInfo() {
         const profile = getStaffProfile();
         return {
@@ -886,12 +886,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     function loadCustomerManagementSnapshot() {
-        let bookedServices = [];
-        try {
-            bookedServices = JSON.parse(localStorage.getItem('myServices')) || [];
-        } catch (err) {
-            bookedServices = [];
-        }
+        const bookedServices = AppData.loadServiceBookings();
 
         const productOrders = AppData.loadProductOrders();
         const servicesCatalog = AppData.loadServices();
@@ -972,8 +967,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
             const svcMeta = (bk.serviceId && serviceById.get(bk.serviceId)) ||
                 (bk.name && serviceByName.get(bk.name.trim().toLowerCase())) || {};
-            const isRecalled = bk.status === 'recalled' || Boolean(bk.recalledBy);
-            const isConfirmed = !isRecalled && (bk.status === 'confirmed' || Boolean(bk.confirmedBy));
+            const flags = getRequestStatusFlags(bk);
             const ts = bk.bookedAt ? Date.parse(bk.bookedAt) : 0;
 
             requests.push({
@@ -990,8 +984,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 customerPhone: bk.customerPhone || bucket.phone,
                 customerAddress: bucket.address,
                 customerAvatar: bucket.avatar,
-                isRecalled: isRecalled,
-                isConfirmed: isConfirmed,
+                isRecalled: flags.isRecalled,
+                isConfirmed: flags.isConfirmed,
                 confirmedBy: bk.confirmedBy || '',
                 confirmedAt: bk.confirmedAt || '',
                 recalledBy: bk.recalledBy || '',
@@ -1026,8 +1020,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 });
             }) : [];
             const totalQty = items.reduce((s, it) => s + (Number(it.qty) || 1), 0);
-            const isRecalled = ord.status === 'recalled' || Boolean(ord.recalledBy);
-            const isConfirmed = !isRecalled && (ord.status === 'confirmed' || Boolean(ord.confirmedBy));
+            const flags = getRequestStatusFlags(ord);
             const ts = ord.orderedAt ? Date.parse(ord.orderedAt) : 0;
 
             requests.push({
@@ -1044,8 +1037,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 customerPhone: ord.customerPhone || bucket.phone,
                 customerAddress: ord.customerAddress || bucket.address,
                 customerAvatar: bucket.avatar,
-                isRecalled: isRecalled,
-                isConfirmed: isConfirmed,
+                isRecalled: flags.isRecalled,
+                isConfirmed: flags.isConfirmed,
                 confirmedBy: ord.confirmedBy || '',
                 confirmedAt: ord.confirmedAt || '',
                 recalledBy: ord.recalledBy || '',
@@ -1074,11 +1067,10 @@ document.addEventListener('DOMContentLoaded', function() {
             return b.sortTs - a.sortTs;
         });
 
+        const countPending = list => list.filter(x => getRequestStatusFlags(x).isPending).length;
         const customers = Array.from(customersMap.values()).sort((a, b) => {
-            const aPending = a.services.filter(s => s.status !== 'confirmed' && s.status !== 'recalled' && !s.confirmedBy && !s.recalledBy).length +
-                a.orders.filter(o => o.status !== 'confirmed' && o.status !== 'recalled' && !o.confirmedBy && !o.recalledBy).length;
-            const bPending = b.services.filter(s => s.status !== 'confirmed' && s.status !== 'recalled' && !s.confirmedBy && !s.recalledBy).length +
-                b.orders.filter(o => o.status !== 'confirmed' && o.status !== 'recalled' && !o.confirmedBy && !o.recalledBy).length;
+            const aPending = countPending(a.services) + countPending(a.orders);
+            const bPending = countPending(b.services) + countPending(b.orders);
             if (bPending !== aPending) return bPending - aPending;
             return (b.services.length + b.orders.length) - (a.services.length + a.orders.length);
         });
@@ -1087,115 +1079,64 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     function confirmCustomerRequest(kind, realIdx) {
+        const isService = kind === 'service';
+        const store = getRequestStore(kind);
+        const list = store.load();
+        const item = list[realIdx];
+        if (!item) return;
+
+        if (getRequestStatusFlags(item).isConfirmed) {
+            renderCustomerList();
+            AppUI.warning({
+                title: isService ? 'Dịch vụ đã được xác nhận' : 'Đơn hàng đã được xác nhận',
+                message: `${isService ? 'Dịch vụ' : 'Đơn hàng'} này đã được "${item.confirmedBy || 'Nhân viên'}" xác nhận trước đó.`
+            });
+            return;
+        }
+
         const staffInfo = getStaffConfirmerInfo();
         const nowIso = new Date().toISOString();
+        const titleLabel = isService
+            ? `dịch vụ "${item.name || 'Dịch vụ'}"`
+            : `đơn hàng ${item.code || ''} (${formatVnd(item.totalAmount)})`;
 
-        if (kind === 'service') {
-            let bookings = [];
-            try {
-                bookings = JSON.parse(localStorage.getItem('myServices')) || [];
-            } catch (err) {
-                bookings = [];
-            }
-            const bk = bookings[realIdx];
-            if (!bk) return;
-            if (bk.status === 'confirmed' || bk.confirmedBy) {
-                renderCustomerList();
-                AppUI.warning({
-                    title: 'Dịch vụ đã được xác nhận',
-                    message: `Dịch vụ này đã được "${bk.confirmedBy || 'Nhân viên'}" xác nhận trước đó.`
-                });
-                return;
-            }
-
-            AppUI.confirm({
-                title: 'Xác nhận đăng ký dịch vụ',
-                message: `Xác nhận tiếp nhận dịch vụ "${bk.name || 'Dịch vụ'}" cho khách hàng "${bk.customerName || bk.customerEmail || 'Khách hàng'}"? Sau khi xác nhận, khách hàng sẽ thấy tên bạn và không thể tự thu hồi.`,
-                confirmText: 'Xác nhận ngay',
-                cancelText: 'Hủy',
-                onConfirm: function() {
-                    let latest = [];
-                    try {
-                        latest = JSON.parse(localStorage.getItem('myServices')) || [];
-                    } catch (err) {
-                        latest = [];
-                    }
-                    const target = latest[realIdx];
-                    if (!target) return;
-                    if (target.status === 'confirmed' || target.confirmedBy) {
-                        renderCustomerList();
-                        return;
-                    }
-                    latest[realIdx] = Object.assign({}, target, {
+        AppUI.confirm({
+            title: isService ? 'Xác nhận đăng ký dịch vụ' : `Xác nhận đơn hàng ${item.code || ''}`,
+            message: `Xác nhận ${isService ? 'tiếp nhận ' : ''}${titleLabel} của khách hàng "${item.customerName || item.customerEmail || 'Khách hàng'}"? Sau khi xác nhận, khách hàng sẽ thấy tên bạn và không thể tự hủy.`,
+            confirmText: isService ? 'Xác nhận ngay' : 'Xác nhận đơn hàng',
+            cancelText: 'Hủy',
+            onConfirm: function() {
+                const updated = updateRequestRecord(kind, realIdx, function(target) {
+                    if (getRequestStatusFlags(target).isConfirmed) return null;
+                    return {
                         status: 'confirmed',
                         confirmedBy: staffInfo.name,
                         confirmedByEmail: staffInfo.email,
                         confirmedByPhone: staffInfo.phone,
                         confirmedAt: nowIso
-                    });
-                    localStorage.setItem('myServices', JSON.stringify(latest));
-                    renderCustomerList();
+                    };
+                }, 'Không thể cập nhật trạng thái vào cơ sở dữ liệu.');
 
-                    AppUI.success({
-                        title: 'Đã xác nhận dịch vụ!',
-                        message: 'Trạng thái đã xác nhận và tên nhân viên phụ trách đã đồng bộ sang trang Khách Hàng.',
-                        details: [
-                            ['Dịch vụ', target.name || 'Dịch vụ'],
-                            ['Khách hàng', target.customerName || target.customerEmail || 'Chưa cập nhật'],
+                renderCustomerList();
+                if (!updated || updated.aborted) return;
+
+                AppUI.success({
+                    title: isService ? 'Đã xác nhận dịch vụ!' : 'Đã xác nhận đơn hàng!',
+                    message: 'Trạng thái đã xác nhận và tên nhân viên xử lý đã đồng bộ sang trang Khách Hàng.',
+                    details: isService
+                        ? [
+                            ['Dịch vụ', updated.name || 'Dịch vụ'],
+                            ['Khách hàng', updated.customerName || updated.customerEmail || 'Chưa cập nhật'],
                             ['Nhân viên xác nhận', staffInfo.name],
                             ['Thời gian xác nhận', new Date(nowIso).toLocaleString('vi-VN')]
                         ]
-                    });
-                }
-            });
-            return;
-        }
-
-        const orders = AppData.loadProductOrders();
-        const ord = orders[realIdx];
-        if (!ord) return;
-        if (ord.status === 'confirmed' || ord.confirmedBy) {
-            renderCustomerList();
-            AppUI.warning({
-                title: 'Đơn hàng đã được xác nhận',
-                message: `Đơn hàng này đã được "${ord.confirmedBy || 'Nhân viên'}" xác nhận trước đó.`
-            });
-            return;
-        }
-
-        AppUI.confirm({
-            title: `Xác nhận đơn hàng ${ord.code || ''}`,
-            message: `Xác nhận đơn hàng ${ord.code || ''} (${formatVnd(ord.totalAmount)}) của khách hàng "${ord.customerName || ord.customerEmail || 'Khách hàng'}"? Sau khi xác nhận, khách hàng sẽ thấy tên bạn và không thể hủy đơn.`,
-            confirmText: 'Xác nhận đơn hàng',
-            cancelText: 'Hủy',
-            onConfirm: function() {
-                const latest = AppData.loadProductOrders();
-                const target = latest[realIdx];
-                if (!target) return;
-                if (target.status === 'confirmed' || target.confirmedBy) {
-                    renderCustomerList();
-                    return;
-                }
-                latest[realIdx] = Object.assign({}, target, {
-                    status: 'confirmed',
-                    confirmedBy: staffInfo.name,
-                    confirmedByEmail: staffInfo.email,
-                    confirmedByPhone: staffInfo.phone,
-                    confirmedAt: nowIso
-                });
-                AppData.saveProductOrders(latest);
-                renderCustomerList();
-
-                AppUI.success({
-                    title: 'Đã xác nhận đơn hàng!',
-                    message: 'Trạng thái đã xác nhận và tên nhân viên xử lý đã đồng bộ sang trang Khách Hàng.',
-                    details: [
-                        ['Mã đơn hàng', target.code || '—'],
-                        ['Khách hàng', `${target.customerName || 'Khách hàng'} (${target.customerPhone || 'Chưa có SĐT'})`],
-                        ['Tổng thanh toán', formatVnd(target.totalAmount)],
-                        ['Nhân viên xác nhận', staffInfo.name],
-                        ['Thời gian xác nhận', new Date(nowIso).toLocaleString('vi-VN')]
-                    ]
+                        : [
+                            ['Mã đơn hàng', updated.code || '—'],
+                            ['Khách hàng', `${updated.customerName || 'Khách hàng'} (${updated.customerPhone || 'Chưa có SĐT'})`],
+                            ['Tổng thanh toán', formatVnd(updated.totalAmount)],
+                            ['Nhân viên xác nhận', staffInfo.name],
+                            ['Thời gian xác nhận', new Date(nowIso).toLocaleString('vi-VN')]
+                        ]
                 });
             }
         });
@@ -1306,17 +1247,13 @@ document.addEventListener('DOMContentLoaded', function() {
     function openCustomerDetail(cust) {
         if (!cust) return;
         const orderTotal = cust.orders
-            .filter(o => o.status !== 'recalled' && !o.recalledBy)
+            .filter(o => !getRequestStatusFlags(o).isRecalled)
             .reduce((s, o) => s + (Number(o.totalAmount) || 0), 0);
         const getRecStatusLabel = r => {
-            if (r.status === 'recalled' || r.recalledBy) return 'Đã thu hồi';
-            if (r.status === 'confirmed' || r.confirmedBy) return 'Đã xác nhận';
-            return 'Chờ xác nhận';
+            const f = getRequestStatusFlags(r);
+            return f.isRecalled ? 'Đã thu hồi' : (f.isConfirmed ? 'Đã xác nhận' : 'Chờ xác nhận');
         };
-        const getRecStaffLabel = r => {
-            if (r.status === 'recalled' || r.recalledBy) return `Thu hồi: ${r.recalledBy || '—'}`;
-            return r.confirmedBy || '—';
-        };
+        const getRecStaffLabel = r => (getRequestStatusFlags(r).isRecalled ? `Thu hồi: ${r.recalledBy || '—'}` : (r.confirmedBy || '—'));
 
         AppUI.profile({
             avatar: cust.avatar,
@@ -1576,9 +1513,9 @@ document.addEventListener('DOMContentLoaded', function() {
             </thead>
             <tbody>
                 ${filteredCustomers.map((cust, idx) => {
-                    const svcConfirmed = cust.services.filter(s => s.status !== 'recalled' && !s.recalledBy && (s.status === 'confirmed' || s.confirmedBy)).length;
-                    const ordConfirmed = cust.orders.filter(o => o.status !== 'recalled' && !o.recalledBy && (o.status === 'confirmed' || o.confirmedBy)).length;
-                    const ordTotal = cust.orders.filter(o => o.status !== 'recalled' && !o.recalledBy).reduce((sum, o) => sum + (Number(o.totalAmount) || 0), 0);
+                    const svcConfirmed = cust.services.filter(s => getRequestStatusFlags(s).isConfirmed).length;
+                    const ordConfirmed = cust.orders.filter(o => getRequestStatusFlags(o).isConfirmed).length;
+                    const ordTotal = cust.orders.filter(o => !getRequestStatusFlags(o).isRecalled).reduce((sum, o) => sum + (Number(o.totalAmount) || 0), 0);
                     return `
                         <tr>
                             <td style="padding: 10px; border: 1px solid var(--border-color);">
@@ -1679,19 +1616,12 @@ document.addEventListener('DOMContentLoaded', function() {
             const recallMessage = (recallMsgInput ? recallMsgInput.value : '').trim();
             if (!recallMessage) return;
 
+            const isService = kind === 'service';
             const staffInfo = getStaffConfirmerInfo();
             const nowIso = new Date().toISOString();
 
-            if (kind === 'service') {
-                let latest = [];
-                try {
-                    latest = JSON.parse(localStorage.getItem('myServices')) || [];
-                } catch (err) {
-                    latest = [];
-                }
-                const target = latest[realIdx];
-                if (!target) return;
-                latest[realIdx] = Object.assign({}, target, {
+            const updated = updateRequestRecord(kind, realIdx, function() {
+                return {
                     status: 'recalled',
                     recalledBy: staffInfo.name,
                     recalledByEmail: staffInfo.email,
@@ -1699,49 +1629,30 @@ document.addEventListener('DOMContentLoaded', function() {
                     recalledAt: nowIso,
                     recallMessage: recallMessage,
                     recallSeenByCustomer: false
-                });
-                localStorage.setItem('myServices', JSON.stringify(latest));
-                if (recallModal) recallModal.classList.add('hidden');
-                renderCustomerList();
+                };
+            }, `Không thể lưu thông tin thu hồi ${isService ? 'dịch vụ' : 'đơn hàng'} vào cơ sở dữ liệu.`);
 
-                AppUI.success({
-                    title: 'Đã thu hồi dịch vụ thành công!',
-                    message: 'Thông báo thu hồi kèm lời nhắn của bạn sẽ hiển thị ngay khi khách hàng mở trang.',
-                    details: [
-                        ['Dịch vụ', target.name || 'Dịch vụ'],
-                        ['Khách hàng', target.customerName || target.customerEmail || 'Khách hàng'],
-                        ['Nhân viên thu hồi', staffInfo.name],
-                        ['Lời nhắn gửi khách', recallMessage]
-                    ]
-                });
-                return;
-            }
+            if (!updated || updated.aborted) return;
 
-            const latestOrders = AppData.loadProductOrders();
-            const targetOrd = latestOrders[realIdx];
-            if (!targetOrd) return;
-            latestOrders[realIdx] = Object.assign({}, targetOrd, {
-                status: 'recalled',
-                recalledBy: staffInfo.name,
-                recalledByEmail: staffInfo.email,
-                recalledByPhone: staffInfo.phone,
-                recalledAt: nowIso,
-                recallMessage: recallMessage,
-                recallSeenByCustomer: false
-            });
-            AppData.saveProductOrders(latestOrders);
             if (recallModal) recallModal.classList.add('hidden');
             renderCustomerList();
 
             AppUI.success({
-                title: 'Đã thu hồi đơn hàng thành công!',
+                title: isService ? 'Đã thu hồi dịch vụ thành công!' : 'Đã thu hồi đơn hàng thành công!',
                 message: 'Thông báo thu hồi kèm lời nhắn của bạn sẽ hiển thị ngay khi khách hàng mở trang.',
-                details: [
-                    ['Mã đơn hàng', targetOrd.code || '—'],
-                    ['Khách hàng', `${targetOrd.customerName || 'Khách hàng'} (${targetOrd.customerPhone || 'Chưa có SĐT'})`],
-                    ['Nhân viên thu hồi', staffInfo.name],
-                    ['Lời nhắn gửi khách', recallMessage]
-                ]
+                details: isService
+                    ? [
+                        ['Dịch vụ', updated.name || 'Dịch vụ'],
+                        ['Khách hàng', updated.customerName || updated.customerEmail || 'Khách hàng'],
+                        ['Nhân viên thu hồi', staffInfo.name],
+                        ['Lời nhắn gửi khách', recallMessage]
+                    ]
+                    : [
+                        ['Mã đơn hàng', updated.code || '—'],
+                        ['Khách hàng', `${updated.customerName || 'Khách hàng'} (${updated.customerPhone || 'Chưa có SĐT'})`],
+                        ['Nhân viên thu hồi', staffInfo.name],
+                        ['Lời nhắn gửi khách', recallMessage]
+                    ]
             });
         });
     }

@@ -228,8 +228,16 @@
         };
     }
 
-    function showNotice(kind, opts) {
-        const options = opts || {};
+    function createBtn(className, label, onClick) {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'app-btn ' + className;
+        btn.textContent = label;
+        btn.addEventListener('click', onClick);
+        return btn;
+    }
+
+    function buildModalBody(kind, iconText, defaultTitle, options) {
         const box = document.createElement('div');
         box.className = 'app-modal';
 
@@ -238,11 +246,11 @@
 
         const icon = document.createElement('div');
         icon.className = 'app-modal-icon ' + kind;
-        icon.textContent = kind === 'success' ? '✓' : (kind === 'error' ? '✕' : '!');
+        icon.textContent = iconText;
 
         const title = document.createElement('h3');
         title.className = 'app-modal-title';
-        title.textContent = options.title || (kind === 'success' ? 'Thành công' : (kind === 'error' ? 'Đã xảy ra lỗi' : 'Thông báo'));
+        title.textContent = options.title || defaultTitle;
 
         header.appendChild(icon);
         header.appendChild(title);
@@ -261,14 +269,19 @@
         const tableEl = buildTableElement(options.table);
         if (tableEl) box.appendChild(tableEl);
 
+        return box;
+    }
+
+    function showNotice(kind, opts) {
+        const options = opts || {};
+        const iconText = kind === 'success' ? '✓' : (kind === 'error' ? '✕' : '!');
+        const defaultTitle = kind === 'success' ? 'Thành công' : (kind === 'error' ? 'Đã xảy ra lỗi' : 'Thông báo');
+        const box = buildModalBody(kind, iconText, defaultTitle, options);
+
         const actions = document.createElement('div');
         actions.className = 'app-modal-actions centered';
 
-        const btnClose = document.createElement('button');
-        btnClose.type = 'button';
-        btnClose.className = 'app-btn app-btn-primary';
-        btnClose.textContent = options.buttonText || 'Đóng';
-        btnClose.addEventListener('click', function () {
+        const btnClose = createBtn('app-btn-primary', options.buttonText || 'Đóng', function () {
             closeActiveModal(true);
         });
 
@@ -281,53 +294,15 @@
 
     function confirmModal(opts) {
         const options = opts || {};
-        const box = document.createElement('div');
-        box.className = 'app-modal';
-
-        const header = document.createElement('div');
-        header.className = 'app-modal-header';
-
-        const icon = document.createElement('div');
-        icon.className = 'app-modal-icon warning';
-        icon.textContent = '!';
-
-        const title = document.createElement('h3');
-        title.className = 'app-modal-title';
-        title.textContent = options.title || 'Xác nhận thao tác';
-
-        header.appendChild(icon);
-        header.appendChild(title);
-        box.appendChild(header);
-
-        if (options.message) {
-            const msg = document.createElement('p');
-            msg.className = 'app-modal-message';
-            msg.textContent = String(options.message);
-            box.appendChild(msg);
-        }
-
-        const detailsEl = buildDetailsElement(options.details);
-        if (detailsEl) box.appendChild(detailsEl);
-
-        const tableEl = buildTableElement(options.table);
-        if (tableEl) box.appendChild(tableEl);
+        const box = buildModalBody('warning', '!', 'Xác nhận thao tác', options);
 
         const actions = document.createElement('div');
         actions.className = 'app-modal-actions';
 
-        const btnCancel = document.createElement('button');
-        btnCancel.type = 'button';
-        btnCancel.className = 'app-btn app-btn-secondary';
-        btnCancel.textContent = options.cancelText || 'Hủy';
-        btnCancel.addEventListener('click', function () {
+        const btnCancel = createBtn('app-btn-secondary', options.cancelText || 'Hủy', function () {
             closeActiveModal(true);
         });
-
-        const btnConfirm = document.createElement('button');
-        btnConfirm.type = 'button';
-        btnConfirm.className = 'app-btn ' + (options.danger ? 'app-btn-danger' : 'app-btn-primary');
-        btnConfirm.textContent = options.confirmText || 'Xác nhận';
-        btnConfirm.addEventListener('click', function () {
+        const btnConfirm = createBtn(options.danger ? 'app-btn-danger' : 'app-btn-primary', options.confirmText || 'Xác nhận', function () {
             closeActiveModal(false);
             if (typeof options.onConfirm === 'function') {
                 options.onConfirm();

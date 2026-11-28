@@ -6,8 +6,250 @@
     const PRODUCTS_KEY = 'meVaBeProducts_v1';
     const CART_KEY = 'meVaBeCart_v1';
     const PRODUCT_ORDERS_KEY = 'meVaBeProductOrders_v1';
+    const STAFF_KEY = 'facilityStaffList';
+    const SERVICE_BOOKINGS_KEY = 'myServices';
     const CURRENT_USER_KEY = 'currentUser';
     const USERS_KEY = 'users';
+
+    const currentScriptSrc = (document.currentScript && document.currentScript.src) || '';
+    const API_BASE = currentScriptSrc
+        ? currentScriptSrc.replace(/\/js\/app-data\.js(?:\?.*)?$/i, '/api/')
+        : '../../api/';
+
+    let apiEnabled = false;
+    let apiBootstrapped = false;
+    let apiSeeded = false;
+    const memoryStore = Object.create(null);
+    const quotaFallbackKeys = Object.create(null);
+
+    function setLocalCache(key, value) {
+        memoryStore[key] = value;
+        try {
+            localStorage.setItem(key, JSON.stringify(value));
+            delete quotaFallbackKeys[key];
+            return true;
+        } catch (err) {
+            quotaFallbackKeys[key] = true;
+            return false;
+        }
+    }
+
+    function getLocalCache(key) {
+        if (quotaFallbackKeys[key] && Object.prototype.hasOwnProperty.call(memoryStore, key)) {
+            return memoryStore[key];
+        }
+        try {
+            const raw = localStorage.getItem(key);
+            if (raw === null) {
+                return Object.prototype.hasOwnProperty.call(memoryStore, key) ? memoryStore[key] : null;
+            }
+            const parsed = JSON.parse(raw);
+            memoryStore[key] = parsed;
+            return parsed;
+        } catch (err) {
+            return Object.prototype.hasOwnProperty.call(memoryStore, key) ? memoryStore[key] : null;
+        }
+    }
+
+    if (typeof global.addEventListener === 'function') {
+        global.addEventListener('storage', function (e) {
+            if (e && e.key) {
+                delete quotaFallbackKeys[e.key];
+                delete memoryStore[e.key];
+            }
+        });
+    }
+
+    function postEntityToServer(entity, data, email) {
+        if (!apiEnabled) return true;
+        try {
+            const xhr = new XMLHttpRequest();
+            xhr.open('POST', API_BASE + 'save.php', false);
+            xhr.setRequestHeader('Content-Type', 'application/json; charset=UTF-8');
+            xhr.send(JSON.stringify({
+                entity: entity,
+                data: data,
+                email: email || ''
+            }));
+            if (xhr.status >= 200 && xhr.status < 300) {
+                const res = JSON.parse(xhr.responseText || '{}');
+                return Boolean(res && res.ok === true);
+            }
+            return false;
+        } catch (err) {
+            if (typeof console !== 'undefined' && console.error) {
+                console.error('Lỗi lưu dữ liệu vào MySQL (' + entity + '):', err);
+            }
+            return false;
+        }
+    }
+
+    function readArrayCache(key) {
+        const parsed = getLocalCache(key);
+        return Array.isArray(parsed) ? parsed : [];
+    }
+
+    function writeEntityArray(key, entity, list, email) {
+        const clean = Array.isArray(list) ? list : [];
+        const cacheOk = setLocalCache(key, clean);
+        return apiEnabled ? postEntityToServer(entity, clean, email) : cacheOk;
+    }
+
+    const svgUriCache = Object.create(null);
+
+    function wrapSvgDataUri(bg, shape) {
+        const key = String(bg) + '|' + String(shape);
+        if (svgUriCache[key]) return svgUriCache[key];
+        const svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 220">' +
+            '<rect width="240" height="220" rx="18" fill="' + bg + '"/>' +
+            shape +
+            '</svg>';
+        const uri = 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svg);
+        svgUriCache[key] = uri;
+        return uri;
+    }
+
+    const LOGICAL_CODE_RE = /^[A-Z0-9]{2,}(?:_[A-Z0-9]+)*_\d{2,}$/;
+
+    function stripVietnameseDiacritics(str) {
+        return String(str || '')
+            .replace(/đ/g, 'd')
+            .replace(/Đ/g, 'D')
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '');
+    }
+
+    function buildInitialsPrefix(text, maxLen, fallback) {
+        const cleanRaw = stripVietnameseDiacritics(text);
+        const noParens = cleanRaw.replace(/\([^)]*\)/g, ' ').trim();
+        const cleaned = (noParens || cleanRaw).replace(/[^A-Za-z0-9\s]/g, ' ').trim();
+        if (!cleaned) return fallback || 'DV';
+
+        const words = cleaned.split(/\s+/).filter(function (w) {
+            if (!w) return false;
+            if (/^\d+(g|kg|ml|l|mg|mcg|m)$/i.test(w)) return false;
+            return /[A-Za-z0-9]/.test(w);
+        });
+        const source = words.length > 0 ? words : cleaned.split(/\s+/);
+        let prefix = source.map(function (w) {
+            return w.charAt(0).toUpperCase();
+        }).join('');
+        if (maxLen && prefix.length > maxLen) {
+            prefix = prefix.slice(0, maxLen);
+        }
+        return prefix || fallback || 'DV';
+    }
+
+    function generateSequentialCode(prefix, existingCodes) {
+        const cleanPrefix = String(prefix || 'CODE').replace(/[^A-Za-z0-9_]/g, '').toUpperCase() || 'CODE';
+        const re = new RegExp('^' + cleanPrefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '_(\\d+)$', 'i');
+        let maxSeq = 0;
+        (Array.isArray(existingCodes) ? existingCodes : []).forEach(function (code) {
+            const m = String(code || '').trim().match(re);
+            if (m) {
+                const n = parseInt(m[1], 10);
+                if (n > maxSeq) maxSeq = n;
+            }
+        });
+        return cleanPrefix + '_' + String(maxSeq + 1).padStart(2, '0');
+    }
+
+    function generateServiceBookingCode(serviceName, existingBookings) {
+        const prefix = buildInitialsPrefix(serviceName, 12, 'DV');
+        const codes = (Array.isArray(existingBookings) ? existingBookings : []).map(function (b) {
+            return typeof b === 'string' ? b : (b && b.id ? b.id : '');
+        });
+        return generateSequentialCode(prefix, codes);
+    }
+
+    function generateOrderCode(items, existingOrders) {
+        const list = Array.isArray(items) ? items.filter(Boolean) : [];
+        let prefix = 'DH';
+        if (list.length === 1) {
+            prefix = buildInitialsPrefix(list[0].name || list[0].code || list[0].id, 8, 'DH');
+        } else if (list.length === 2) {
+            const p1 = buildInitialsPrefix(list[0].name || list[0].code || list[0].id, 4, 'SP1');
+            const p2 = buildInitialsPrefix(list[1].name || list[1].code || list[1].id, 4, 'SP2');
+            prefix = p1 + '_' + p2;
+        } else if (list.length > 2) {
+            const p1 = buildInitialsPrefix(list[0].name || list[0].code || list[0].id, 4, 'SP');
+            prefix = p1 + '_CB' + list.length;
+        }
+        const codes = (Array.isArray(existingOrders) ? existingOrders : []).map(function (o) {
+            return typeof o === 'string' ? o : (o && o.code ? o.code : '');
+        });
+        return generateSequentialCode(prefix, codes);
+    }
+
+    function fetchSnapshotFromServer() {
+        const proto = (global.location && global.location.protocol) || '';
+        if (proto !== 'http:' && proto !== 'https:') {
+            apiBootstrapped = true;
+            apiEnabled = false;
+            return false;
+        }
+        try {
+            const xhr = new XMLHttpRequest();
+            xhr.open('GET', API_BASE + 'bootstrap.php?t=' + Date.now(), false);
+            xhr.send(null);
+            if (xhr.status !== 200 || !xhr.responseText) {
+                apiBootstrapped = true;
+                apiEnabled = false;
+                return false;
+            }
+            const res = JSON.parse(xhr.responseText);
+            if (!res || res.ok !== true || res.engine !== 'mysql' || !res.data) {
+                apiBootstrapped = true;
+                apiEnabled = false;
+                return false;
+            }
+
+            apiEnabled = true;
+            apiBootstrapped = true;
+            apiSeeded = Boolean(res.seeded);
+
+            const d = res.data;
+            setLocalCache(USERS_KEY, Array.isArray(d.users) ? d.users : []);
+            setLocalCache(STAFF_KEY, Array.isArray(d.staff) ? d.staff : []);
+            if (Array.isArray(d.services) && (apiSeeded || d.services.length > 0)) {
+                setLocalCache(SERVICES_KEY, d.services);
+            } else if (!apiSeeded) {
+                try {
+                    localStorage.removeItem(SERVICES_KEY);
+                } catch (err) { /* ignore */ }
+                delete memoryStore[SERVICES_KEY];
+            }
+            if (Array.isArray(d.products) && (apiSeeded || d.products.length > 0)) {
+                setLocalCache(PRODUCTS_KEY, d.products);
+            } else if (!apiSeeded) {
+                try {
+                    localStorage.removeItem(PRODUCTS_KEY);
+                } catch (err) { /* ignore */ }
+                delete memoryStore[PRODUCTS_KEY];
+            }
+            setLocalCache(SHIFTS_KEY, Array.isArray(d.shifts) ? d.shifts : []);
+            setLocalCache(SERVICE_BOOKINGS_KEY, Array.isArray(d.serviceBookings) ? d.serviceBookings : []);
+            setLocalCache(PRODUCT_ORDERS_KEY, Array.isArray(d.productOrders) ? d.productOrders : []);
+
+            const cartsMap = d.cartsByEmail && typeof d.cartsByEmail === 'object' ? d.cartsByEmail : {};
+            Object.keys(cartsMap).forEach(function (emailKey) {
+                setLocalCache(getCartStorageKey(emailKey), Array.isArray(cartsMap[emailKey]) ? cartsMap[emailKey] : []);
+            });
+            const cur = getCurrentUser();
+            if (cur && cur.email) {
+                const curCartKey = getCartStorageKey(cur.email);
+                const normEmail = String(cur.email).trim().toLowerCase();
+                if (!Object.prototype.hasOwnProperty.call(cartsMap, normEmail)) {
+                    setLocalCache(curCartKey, []);
+                }
+            }
+            return true;
+        } catch (err) {
+            apiBootstrapped = true;
+            apiEnabled = false;
+            return false;
+        }
+    }
 
     const SHIFT_TYPES = [
         { key: 'sang', label: 'Ca Sáng', start: '08:00', end: '12:00', hours: 4 },
@@ -253,23 +495,53 @@
         }
     ];
 
-    /* ================= TÀI KHOẢN & PHIÊN ĐĂNG NHẬP ================= */
+    /* Tài khoản & phiên đăng nhập */
     function loadUsers() {
-        try {
-            const parsed = JSON.parse(localStorage.getItem(USERS_KEY));
-            return Array.isArray(parsed) ? parsed : [];
-        } catch (err) {
-            return [];
-        }
+        return readArrayCache(USERS_KEY);
     }
 
     function saveUsers(users) {
-        try {
-            localStorage.setItem(USERS_KEY, JSON.stringify(users));
-            return true;
-        } catch (err) {
-            return false;
+        return writeEntityArray(USERS_KEY, 'users', users);
+    }
+
+    function loadStaff() {
+        return readArrayCache(STAFF_KEY);
+    }
+
+    function saveStaff(staffList) {
+        return writeEntityArray(STAFF_KEY, 'staff', staffList);
+    }
+
+    function loadServiceBookings() {
+        const list = readArrayCache(SERVICE_BOOKINGS_KEY);
+        if (list.length === 0) return list;
+
+        const usedCodes = [];
+        list.forEach(function (b) {
+            if (b && LOGICAL_CODE_RE.test(String(b.id || '').trim())) {
+                usedCodes.push(String(b.id).trim());
+            }
+        });
+
+        let changed = false;
+        const normalized = list.map(function (b) {
+            if (!b || typeof b !== 'object') return b;
+            const curId = String(b.id || '').trim();
+            if (LOGICAL_CODE_RE.test(curId)) return b;
+            changed = true;
+            const nextCode = generateServiceBookingCode(b.name || b.serviceId || 'Dịch vụ', usedCodes);
+            usedCodes.push(nextCode);
+            return Object.assign({}, b, { id: nextCode });
+        });
+
+        if (changed) {
+            saveServiceBookings(normalized);
         }
+        return normalized;
+    }
+
+    function saveServiceBookings(bookings) {
+        return writeEntityArray(SERVICE_BOOKINGS_KEY, 'serviceBookings', bookings);
     }
 
     function ensureDefaultAdmin() {
@@ -341,7 +613,7 @@
         return user;
     }
 
-    /* ================= DỊCH VỤ DÙNG CHUNG (CHỦ CƠ SỞ <-> KHÁCH HÀNG) ================= */
+    /* Dịch vụ mẫu */
     function buildServiceIllustrationSvg(service) {
         const bg = (service && service.artBg) || '#fff1f6';
         const accent = (service && service.artAccent) || '#ff4d8d';
@@ -394,13 +666,7 @@
                 '<path d="M120 144 C120 144, 82 118, 82 92 C82 78, 92 70, 104 70 C112 70, 118 75, 120 80 C122 75, 128 70, 136 70 C148 70, 158 78, 158 92 C158 118, 120 144, 120 144 Z" fill="' + accent + '" fill-opacity="0.24"/>';
         }
 
-        const svg =
-            '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 220">' +
-            '<rect width="240" height="220" rx="14" fill="' + bg + '"/>' +
-            '<circle cx="120" cy="112" r="76" fill="#ffffff" fill-opacity="0.65"/>' +
-            shape +
-            '</svg>';
-        return 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svg);
+        return wrapSvgDataUri(bg, shape);
     }
 
     function normalizeServiceRecord(rawItem) {
@@ -433,40 +699,34 @@
     }
 
     function loadServices() {
-        try {
-            const raw = localStorage.getItem(SERVICES_KEY);
-            if (raw === null) {
-                const cloned = DEFAULT_SERVICES.map(function (s) {
-                    return normalizeServiceRecord(Object.assign({}, s, {
-                        benefits: s.benefits.slice(),
-                        image: ''
-                    }));
-                });
-                saveServices(cloned);
-                return cloned;
-            }
-            const parsed = JSON.parse(raw);
-            if (!Array.isArray(parsed)) return [];
-            return parsed.map(normalizeServiceRecord);
-        } catch (err) {
-            return [];
+        const parsed = getLocalCache(SERVICES_KEY);
+        if (parsed === null) {
+            const cloned = DEFAULT_SERVICES.map(function (s) {
+                return normalizeServiceRecord(Object.assign({}, s, {
+                    benefits: s.benefits.slice(),
+                    image: ''
+                }));
+            });
+            saveServices(cloned);
+            return cloned;
         }
+        if (!Array.isArray(parsed)) return [];
+        return parsed.map(normalizeServiceRecord);
     }
 
     function saveServices(services) {
-        try {
-            const normalized = (Array.isArray(services) ? services : []).map(function (s) {
-                const copy = Object.assign({}, s);
-                if (!copy.image) {
-                    copy.image = buildServiceIllustrationSvg(copy);
-                }
-                return copy;
-            });
-            localStorage.setItem(SERVICES_KEY, JSON.stringify(normalized));
-            return true;
-        } catch (err) {
-            return false;
+        const normalized = (Array.isArray(services) ? services : []).map(function (s) {
+            const copy = Object.assign({}, s);
+            if (!copy.image) {
+                copy.image = buildServiceIllustrationSvg(copy);
+            }
+            return copy;
+        });
+        const cacheOk = setLocalCache(SERVICES_KEY, normalized);
+        if (apiEnabled) {
+            return postEntityToServer('services', normalized);
         }
+        return cacheOk;
     }
 
     /* ================= TIỆN ÍCH NGÀY & CA TRỰC ================= */
@@ -964,91 +1224,83 @@
                 '<circle cx="120" cy="118" r="10" fill="#ffffff"/>';
         }
 
-        const svg =
-            '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 220">' +
-            '<rect width="240" height="220" rx="14" fill="' + bg + '"/>' +
-            '<circle cx="120" cy="112" r="76" fill="#ffffff" fill-opacity="0.65"/>' +
-            shape +
-            '</svg>';
-        return 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svg);
+        return wrapSvgDataUri(bg, shape);
     }
 
     function loadProducts() {
-        try {
-            const raw = localStorage.getItem(PRODUCTS_KEY);
-            if (raw === null) {
-                const seeded = DEFAULT_PRODUCTS.map(function (p) {
-                    return Object.assign({}, p, { image: buildProductIllustrationSvg(p) });
-                });
-                localStorage.setItem(PRODUCTS_KEY, JSON.stringify(seeded));
-                return seeded;
-            }
-            const parsed = JSON.parse(raw);
-            if (!Array.isArray(parsed)) {
-                return DEFAULT_PRODUCTS.map(function (p) {
-                    return Object.assign({}, p, { image: buildProductIllustrationSvg(p) });
-                });
-            }
-
-            let changed = false;
-            let seq = 1;
-            const migrated = parsed.map(function (p) {
-                if (!p) return p;
-                const copy = Object.assign({}, p);
-                if (copy.id && LEGACY_PRODUCT_ID_MAP[copy.id]) {
-                    copy.id = LEGACY_PRODUCT_ID_MAP[copy.id];
-                    changed = true;
-                }
-                const targetCode = formatProductCode(copy.code) ||
-                    (copy.id && /^\d+$/.test(copy.id) ? formatProductCode(copy.id) : String(seq).padStart(3, '0'));
-                if (!copy.code || copy.code !== targetCode) {
-                    copy.code = targetCode;
-                    changed = true;
-                }
-                if (copy.id && copy.id.indexOf('sp-') === 0) {
-                    copy.id = targetCode;
-                    changed = true;
-                }
-                if (/^\d+$/.test(targetCode)) {
-                    const n = parseInt(targetCode, 10);
-                    if (n >= seq) seq = n + 1;
-                } else {
-                    seq++;
-                }
-                if (!copy.image) {
-                    copy.image = buildProductIllustrationSvg(copy);
-                    changed = true;
-                }
-                return copy;
+        const parsed = getLocalCache(PRODUCTS_KEY);
+        if (parsed === null) {
+            const seeded = DEFAULT_PRODUCTS.map(function (p) {
+                return Object.assign({}, p, { image: buildProductIllustrationSvg(p) });
             });
-
-            if (changed) {
-                localStorage.setItem(PRODUCTS_KEY, JSON.stringify(migrated));
-            }
-            return migrated;
-        } catch (err) {
+            saveProducts(seeded);
+            return seeded;
+        }
+        if (!Array.isArray(parsed)) {
             return DEFAULT_PRODUCTS.map(function (p) {
                 return Object.assign({}, p, { image: buildProductIllustrationSvg(p) });
             });
         }
+
+        let changed = false;
+        let idMigrated = false;
+        let seq = 1;
+        const migrated = parsed.map(function (p) {
+            if (!p) return p;
+            const copy = Object.assign({}, p);
+            if (copy.id && LEGACY_PRODUCT_ID_MAP[copy.id]) {
+                copy.id = LEGACY_PRODUCT_ID_MAP[copy.id];
+                changed = true;
+                idMigrated = true;
+            }
+            const targetCode = formatProductCode(copy.code) ||
+                (copy.id && /^\d+$/.test(copy.id) ? formatProductCode(copy.id) : String(seq).padStart(3, '0'));
+            if (!copy.code || copy.code !== targetCode) {
+                copy.code = targetCode;
+                changed = true;
+                idMigrated = true;
+            }
+            if (copy.id && copy.id.indexOf('sp-') === 0) {
+                copy.id = targetCode;
+                changed = true;
+                idMigrated = true;
+            }
+            if (/^\d+$/.test(targetCode)) {
+                const n = parseInt(targetCode, 10);
+                if (n >= seq) seq = n + 1;
+            } else {
+                seq++;
+            }
+            if (!copy.image) {
+                copy.image = buildProductIllustrationSvg(copy);
+                changed = true;
+            }
+            return copy;
+        });
+
+        if (idMigrated) {
+            saveProducts(migrated);
+        } else if (changed) {
+            setLocalCache(PRODUCTS_KEY, migrated);
+        }
+        return migrated;
     }
 
     function saveProducts(products) {
-        try {
-            const normalized = (Array.isArray(products) ? products : []).map(function (p, idx) {
-                const copy = Object.assign({}, p);
-                copy.code = formatProductCode(copy.code) || String(idx + 1).padStart(3, '0');
-                if (!copy.id) copy.id = copy.code;
-                if (!copy.image) {
-                    copy.image = buildProductIllustrationSvg(copy);
-                }
-                return copy;
-            });
-            localStorage.setItem(PRODUCTS_KEY, JSON.stringify(normalized));
-            return true;
-        } catch (err) {
-            return false;
+        const normalized = (Array.isArray(products) ? products : []).map(function (p, idx) {
+            const copy = Object.assign({}, p);
+            copy.code = formatProductCode(copy.code) || String(idx + 1).padStart(3, '0');
+            if (!copy.id) copy.id = copy.code;
+            if (!copy.image) {
+                copy.image = buildProductIllustrationSvg(copy);
+            }
+            return copy;
+        });
+        const cacheOk = setLocalCache(PRODUCTS_KEY, normalized);
+        if (apiEnabled) {
+            return postEntityToServer('products', normalized);
         }
+        return cacheOk;
     }
 
     function getCartStorageKey(userEmail) {
@@ -1057,41 +1309,40 @@
     }
 
     function loadCart(userEmail) {
-        try {
-            const raw = localStorage.getItem(getCartStorageKey(userEmail));
-            const parsed = raw ? JSON.parse(raw) : [];
-            if (!Array.isArray(parsed)) return [];
-            return parsed.map(function (it) {
-                if (!it) return it;
-                const copy = Object.assign({}, it);
-                if (copy.id && LEGACY_PRODUCT_ID_MAP[copy.id]) {
-                    copy.id = LEGACY_PRODUCT_ID_MAP[copy.id];
-                }
-                copy.code = formatProductCode(copy.code) || formatProductCode(copy.id);
-                return copy;
-            });
-        } catch (err) {
-            return [];
-        }
+        const parsed = getLocalCache(getCartStorageKey(userEmail));
+        if (!Array.isArray(parsed)) return [];
+        return parsed.map(function (it) {
+            if (!it) return it;
+            const copy = Object.assign({}, it);
+            if (copy.id && LEGACY_PRODUCT_ID_MAP[copy.id]) {
+                copy.id = LEGACY_PRODUCT_ID_MAP[copy.id];
+            }
+            copy.code = formatProductCode(copy.code) || formatProductCode(copy.id);
+            return copy;
+        });
     }
 
     function saveCart(userEmail, cart) {
-        try {
-            localStorage.setItem(getCartStorageKey(userEmail), JSON.stringify(cart));
-            return true;
-        } catch (err) {
-            return false;
-        }
+        const cleanEmail = (userEmail || 'guest').trim().toLowerCase();
+        return writeEntityArray(getCartStorageKey(cleanEmail), 'cart', cart, cleanEmail);
     }
 
     function loadProductOrders() {
-        try {
-            const raw = localStorage.getItem(PRODUCT_ORDERS_KEY);
-            const parsed = raw ? JSON.parse(raw) : [];
-            if (!Array.isArray(parsed)) return [];
-            return parsed.map(function (ord) {
-                if (!ord || !Array.isArray(ord.items)) return ord;
-                const copy = Object.assign({}, ord);
+        const parsed = getLocalCache(PRODUCT_ORDERS_KEY);
+        if (!Array.isArray(parsed)) return [];
+
+        const usedCodes = [];
+        parsed.forEach(function (ord) {
+            if (ord && LOGICAL_CODE_RE.test(String(ord.code || '').trim())) {
+                usedCodes.push(String(ord.code).trim());
+            }
+        });
+
+        let codeMigrated = false;
+        const normalized = parsed.map(function (ord) {
+            if (!ord || typeof ord !== 'object') return ord;
+            const copy = Object.assign({}, ord);
+            if (Array.isArray(ord.items)) {
                 copy.items = ord.items.map(function (it) {
                     if (!it) return it;
                     const itemCopy = Object.assign({}, it);
@@ -1101,39 +1352,65 @@
                     itemCopy.code = formatProductCode(itemCopy.code) || formatProductCode(itemCopy.id);
                     return itemCopy;
                 });
-                return copy;
-            });
-        } catch (err) {
-            return [];
+            }
+            return copy;
+        });
+
+        // Sinh mã từ đơn cũ nhất (cuối mảng) đến đơn mới nhất (đầu mảng)
+        for (let i = normalized.length - 1; i >= 0; i--) {
+            const ord = normalized[i];
+            if (!ord || typeof ord !== 'object') continue;
+            const curCode = String(ord.code || '').trim();
+            if (!LOGICAL_CODE_RE.test(curCode)) {
+                const nextCode = generateOrderCode(ord.items, usedCodes);
+                usedCodes.push(nextCode);
+                ord.code = nextCode;
+                codeMigrated = true;
+            }
         }
+
+        if (codeMigrated) {
+            saveProductOrders(normalized);
+        }
+        return normalized;
     }
 
     function saveProductOrders(orders) {
-        try {
-            localStorage.setItem(PRODUCT_ORDERS_KEY, JSON.stringify(orders));
-            return true;
-        } catch (err) {
-            return false;
-        }
+        return writeEntityArray(PRODUCT_ORDERS_KEY, 'productOrders', orders);
     }
-    // KHÔNG tạo dữ liệu giả - chỉ trả về dữ liệu thật đã đăng ký
+
     function loadShifts() {
-        try {
-            const raw = localStorage.getItem(SHIFTS_KEY);
-            if (raw === null) return [];
-            const parsed = JSON.parse(raw);
-            return Array.isArray(parsed) ? parsed : [];
-        } catch (err) {
-            return [];
-        }
+        return readArrayCache(SHIFTS_KEY);
     }
 
     function saveShifts(arr) {
-        try {
-            localStorage.setItem(SHIFTS_KEY, JSON.stringify(arr));
-            return true;
-        } catch (err) {
-            return false;
+        return writeEntityArray(SHIFTS_KEY, 'shifts', arr);
+    }
+
+    function refreshFromDatabase() {
+        const ok = fetchSnapshotFromServer();
+        if (ok && !apiSeeded) {
+            ensureDefaultAdmin();
+            loadServices();
+            loadProducts();
+            postEntityToServer('markSeeded', []);
+            apiSeeded = true;
+        }
+        return ok;
+    }
+
+    function isDatabaseConnected() {
+        return apiEnabled;
+    }
+
+    fetchSnapshotFromServer();
+    if (apiEnabled) {
+        ensureDefaultAdmin();
+        if (!apiSeeded) {
+            loadServices();
+            loadProducts();
+            postEntityToServer('markSeeded', []);
+            apiSeeded = true;
         }
     }
 
@@ -1143,11 +1420,18 @@
         PRODUCTS_KEY: PRODUCTS_KEY,
         CART_KEY: CART_KEY,
         PRODUCT_ORDERS_KEY: PRODUCT_ORDERS_KEY,
+        STAFF_KEY: STAFF_KEY,
+        SERVICE_BOOKINGS_KEY: SERVICE_BOOKINGS_KEY,
         CURRENT_USER_KEY: CURRENT_USER_KEY,
         SHIFT_TYPES: SHIFT_TYPES,
         DAY_NAMES: DAY_NAMES,
         loadUsers: loadUsers,
         saveUsers: saveUsers,
+        loadStaff: loadStaff,
+        saveStaff: saveStaff,
+        loadServiceBookings: loadServiceBookings,
+        saveServiceBookings: saveServiceBookings,
+        generateServiceBookingCode: generateServiceBookingCode,
         ensureDefaultAdmin: ensureDefaultAdmin,
         getCurrentUser: getCurrentUser,
         setCurrentUser: setCurrentUser,
@@ -1165,6 +1449,7 @@
         saveCart: saveCart,
         loadProductOrders: loadProductOrders,
         saveProductOrders: saveProductOrders,
+        generateOrderCode: generateOrderCode,
         toISODate: toISODate,
         parseISODate: parseISODate,
         formatDate: formatDate,
@@ -1176,6 +1461,8 @@
         isShiftStarted: isShiftStarted,
         createShiftRecord: createShiftRecord,
         loadShifts: loadShifts,
-        saveShifts: saveShifts
+        saveShifts: saveShifts,
+        refreshFromDatabase: refreshFromDatabase,
+        isDatabaseConnected: isDatabaseConnected
     };
 })(window);

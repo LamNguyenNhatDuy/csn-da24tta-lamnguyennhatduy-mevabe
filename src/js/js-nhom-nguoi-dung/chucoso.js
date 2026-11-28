@@ -1,29 +1,23 @@
-let staffList = [];
-try {
-    staffList = JSON.parse(localStorage.getItem("facilityStaffList")) || [];
-} catch (err) {
-    staffList = [];
-}
+let staffList = AppData.loadStaff();
 
 let pendingModalAvatar = "";
 let pendingServiceImage = "";
 let pendingProductImage = "";
 
 function saveStaffList() {
-    try {
-        localStorage.setItem("facilityStaffList", JSON.stringify(staffList));
+    if (AppData.saveStaff(staffList)) {
         return true;
-    } catch (err) {
-        AppUI.error({
-            title: "Không thể lưu dữ liệu",
-            message: "Bộ nhớ trình duyệt đã đầy hoặc bị chặn. Vui lòng thử ảnh nhỏ hơn."
-        });
-        return false;
     }
+    AppUI.error({
+        title: "Không thể lưu dữ liệu",
+        message: "Không thể cập nhật danh sách nhân viên vào cơ sở dữ liệu."
+    });
+    return false;
 }
 
-// Đồng bộ hai chiều giữa facilityStaffList và tài khoản role='nhanvien' trong users
+// Đồng bộ nhân viên với tài khoản users
 function syncStaffWithUsers() {
+    staffList = AppData.loadStaff();
     const users = AppData.loadUsers();
     let staffChanged = false;
 
@@ -252,13 +246,27 @@ window.deleteStaff = function(index) {
     });
 };
 
-/* ================= QUẢN LÝ DỊCH VỤ (ĐỒNG BỘ VỚI TRANG KHÁCH HÀNG) ================= */
+/* Quản lý dịch vụ */
 function isCustomUploadedImage(src) {
     return Boolean(src) && src.indexOf("data:image/svg+xml") !== 0;
 }
 
 function formatCatalogVnd(amount) {
     return Number(amount || 0).toLocaleString("vi-VN") + "đ";
+}
+
+function normalizeCatalogPricing(priceVal, origVal, discountVal) {
+    const price = Math.max(0, Math.round(Number(priceVal) || 0));
+    const rawOrigStr = String(origVal == null ? "" : origVal).trim();
+    const discount = Math.min(99, Math.max(0, Math.round(Number(discountVal) || 0)));
+    let originalPrice = rawOrigStr !== "" ? Math.max(0, Math.round(Number(rawOrigStr) || 0)) : 0;
+
+    if (originalPrice > 0 && originalPrice < price) originalPrice = price;
+    if (originalPrice === 0 && discount > 0 && price > 0) {
+        originalPrice = Math.round(price / (1 - discount / 100));
+    }
+    if (originalPrice <= price && discount === 0) originalPrice = price;
+    return { price, originalPrice, discount };
 }
 
 function getServiceArtStyle(category) {
@@ -478,15 +486,7 @@ window.deleteService = function(serviceId) {
     });
 };
 
-/* ================= QUẢN LÝ SẢN PHẨM (ĐỒNG BỘ VỚI TRANG KHÁCH HÀNG) ================= */
-function isCustomProductImage(src) {
-    return isCustomUploadedImage(src);
-}
-
-function formatProductVnd(amount) {
-    return formatCatalogVnd(amount);
-}
-
+/* Quản lý sản phẩm */
 function getCategoryArtStyle(category) {
     switch (category) {
         case "Tã & Bỉm":
@@ -542,7 +542,7 @@ function renderProductsTable() {
             : `<span class="service-thumb">Ảnh</span>`;
         const metaParts = [prod.specBadge, prod.saleTag].filter(Boolean).join(" · ");
         const origHtml = prod.originalPrice > prod.price
-            ? `<div class="product-price-sub">${formatProductVnd(prod.originalPrice)}</div>`
+            ? `<div class="product-price-sub">${formatCatalogVnd(prod.originalPrice)}</div>`
             : "";
         const discountHtml = prod.discount > 0
             ? `<span class="product-badge-mini">-${prod.discount}%</span>`
@@ -572,7 +572,7 @@ function renderProductsTable() {
                     <div style="font-size: 0.78rem; color: var(--text-muted);">${AppUI.escapeHtml([prod.age, prod.type].filter(Boolean).join(" · "))}</div>
                 </td>
                 <td style="text-align: right; white-space: nowrap;">
-                    <div style="font-weight: 700; color: var(--primary);">${formatProductVnd(prod.price)}</div>
+                    <div style="font-weight: 700; color: var(--primary);">${formatCatalogVnd(prod.price)}</div>
                     ${origHtml}
                     ${discountHtml ? `<div style="margin-top: 2px;">${discountHtml}</div>` : ""}
                 </td>
@@ -602,8 +602,8 @@ window.viewProductDetail = function(productId) {
         subtitle: [prod.category, prod.age, prod.type].filter(Boolean).join(" · "),
         details: [
             ["Mã sản phẩm", AppData.formatProductCode(prod.code || prod.id)],
-            ["Giá bán", formatProductVnd(prod.price)],
-            ["Giá gốc", prod.originalPrice > prod.price ? `${formatProductVnd(prod.originalPrice)} (Giảm ${prod.discount || 0}%)` : "Không áp dụng"],
+            ["Giá bán", formatCatalogVnd(prod.price)],
+            ["Giá gốc", prod.originalPrice > prod.price ? `${formatCatalogVnd(prod.originalPrice)} (Giảm ${prod.discount || 0}%)` : "Không áp dụng"],
             ["Vận chuyển", `${prod.shipping || "Giao nhanh trong ngày"}${prod.freeship ? " · Freeship" : ""}`],
             ["Quà tặng kèm", prod.gift || "Không có"],
             ["Nhãn hiển thị", [prod.saleTag, prod.specBadge].filter(Boolean).join(" | ") || "Không có"],
@@ -634,7 +634,7 @@ window.editProduct = function(productId) {
     document.getElementById("modal-product-freeship").checked = Boolean(prod.freeship);
     document.getElementById("modal-product-desc").value = prod.desc || "";
 
-    pendingProductImage = isCustomProductImage(prod.image) ? prod.image : "";
+    pendingProductImage = isCustomUploadedImage(prod.image) ? prod.image : "";
     renderProductImagePreview(pendingProductImage, prod.name, prod);
 
     document.getElementById("product-modal-title").textContent = "Chỉnh Sửa Sản Phẩm";
@@ -676,7 +676,7 @@ window.deleteProduct = function(productId) {
     });
 };
 
-/* ================= BÁO CÁO & THỐNG KÊ ================= */
+/* Báo cáo & thống kê */
 function parseRecordDate(record, isoField) {
     if (!record) return null;
     const isoVal = record[isoField];
@@ -746,13 +746,7 @@ function formatHours(hours) {
 function computeReportData(period) {
     const now = new Date();
     const allShifts = AppData.loadShifts();
-
-    let allBookings = [];
-    try {
-        allBookings = JSON.parse(localStorage.getItem("myServices")) || [];
-    } catch (err) {
-        allBookings = [];
-    }
+    const allBookings = AppData.loadServiceBookings();
 
     let khLegacyProfile = null;
     try {
@@ -1591,12 +1585,7 @@ window.deleteReportCustomer = function(email, isLegacy) {
 };
 
 window.editReportBooking = function(realIdx) {
-    let bookings = [];
-    try {
-        bookings = JSON.parse(localStorage.getItem("myServices")) || [];
-    } catch (err) {
-        bookings = [];
-    }
+    const bookings = AppData.loadServiceBookings();
     const bk = bookings[realIdx];
     if (!bk) return;
 
@@ -1631,12 +1620,7 @@ window.editReportBooking = function(realIdx) {
 };
 
 window.deleteReportBooking = function(realIdx) {
-    let bookings = [];
-    try {
-        bookings = JSON.parse(localStorage.getItem("myServices")) || [];
-    } catch (err) {
-        bookings = [];
-    }
+    const bookings = AppData.loadServiceBookings();
     const bk = bookings[realIdx];
     if (!bk) return;
 
@@ -1647,15 +1631,10 @@ window.deleteReportBooking = function(realIdx) {
         confirmText: "Xóa lượt đăng ký",
         cancelText: "Hủy",
         onConfirm: function () {
-            let latest = [];
-            try {
-                latest = JSON.parse(localStorage.getItem("myServices")) || [];
-            } catch (err) {
-                latest = [];
-            }
+            const latest = AppData.loadServiceBookings();
             if (realIdx >= 0 && realIdx < latest.length) {
                 latest.splice(realIdx, 1);
-                localStorage.setItem("myServices", JSON.stringify(latest));
+                AppData.saveServiceBookings(latest);
             }
             renderReport();
             AppUI.success({
@@ -2184,12 +2163,43 @@ document.addEventListener("DOMContentLoaded", function () {
         `;
     }
 
-    // 2. Render bảng nhân sự thực tế, quản lý dịch vụ & quản lý sản phẩm
+    /* Khởi tạo bảng dữ liệu */
     renderStaffTable();
     renderServicesTable();
     renderProductsTable();
 
-    // 3. Modal Mở tài khoản / Cập nhật nhân viên
+    function bindImageUploadControls(cfg) {
+        const { chooseBtn, removeBtn, fileInput, maxSize, errTitle, onSetImage } = cfg;
+        if (chooseBtn && fileInput) {
+            chooseBtn.addEventListener("click", function () {
+                fileInput.click();
+            });
+            fileInput.addEventListener("change", function () {
+                const file = fileInput.files && fileInput.files[0];
+                if (!file) return;
+                AppUI.readImageFile(file, maxSize)
+                    .then(function (dataUrl) {
+                        onSetImage(dataUrl);
+                    })
+                    .catch(function (err) {
+                        AppUI.error({
+                            title: errTitle,
+                            message: err && err.message ? err.message : "Vui lòng chọn tệp ảnh hợp lệ."
+                        });
+                    })
+                    .finally(function () {
+                        fileInput.value = "";
+                    });
+            });
+        }
+        if (removeBtn) {
+            removeBtn.addEventListener("click", function () {
+                onSetImage("");
+            });
+        }
+    }
+
+    /* Modal nhân viên */
     const staffModal = document.getElementById("staff-modal");
     const btnOpenModal = document.getElementById("btn-open-staff-modal");
     const btnCloseModal = document.getElementById("btn-close-staff-modal");
@@ -2200,43 +2210,24 @@ document.addEventListener("DOMContentLoaded", function () {
     const btnRemoveModalAvatar = document.getElementById("btn-remove-modal-avatar");
     const modalNameInput = document.getElementById("modal-staff-name");
 
-    if (btnChooseModalAvatar && modalAvatarInput) {
-        btnChooseModalAvatar.addEventListener("click", function () {
-            modalAvatarInput.click();
-        });
+    const refreshStaffAvatarPreview = () =>
+        renderModalAvatarPreview(pendingModalAvatar, modalNameInput ? modalNameInput.value : "Nhân viên");
 
-        modalAvatarInput.addEventListener("change", function () {
-            const file = modalAvatarInput.files && modalAvatarInput.files[0];
-            if (!file) return;
-            AppUI.readImageFile(file, 256)
-                .then(function (dataUrl) {
-                    pendingModalAvatar = dataUrl;
-                    renderModalAvatarPreview(pendingModalAvatar, modalNameInput ? modalNameInput.value : "Nhân viên");
-                })
-                .catch(function (err) {
-                    AppUI.error({
-                        title: "Không thể tải ảnh đại diện",
-                        message: err && err.message ? err.message : "Vui lòng chọn tệp ảnh hợp lệ."
-                    });
-                })
-                .finally(function () {
-                    modalAvatarInput.value = "";
-                });
-        });
-    }
-
-    if (btnRemoveModalAvatar) {
-        btnRemoveModalAvatar.addEventListener("click", function () {
-            pendingModalAvatar = "";
-            renderModalAvatarPreview("", modalNameInput ? modalNameInput.value : "Nhân viên");
-        });
-    }
+    bindImageUploadControls({
+        chooseBtn: btnChooseModalAvatar,
+        removeBtn: btnRemoveModalAvatar,
+        fileInput: modalAvatarInput,
+        maxSize: 256,
+        errTitle: "Không thể tải ảnh đại diện",
+        onSetImage: function (dataUrl) {
+            pendingModalAvatar = dataUrl;
+            refreshStaffAvatarPreview();
+        }
+    });
 
     if (modalNameInput) {
         modalNameInput.addEventListener("input", function () {
-            if (!pendingModalAvatar) {
-                renderModalAvatarPreview("", modalNameInput.value || "Nhân viên");
-            }
+            if (!pendingModalAvatar) refreshStaffAvatarPreview();
         });
     }
 
@@ -2425,7 +2416,7 @@ document.addEventListener("DOMContentLoaded", function () {
         });
     }
 
-    // 4. Modal Thêm / Sửa Dịch Vụ (đồng bộ với Khách Hàng)
+    /* Modal dịch vụ */
     const serviceModal = document.getElementById("service-modal");
     const btnOpenServiceModal = document.getElementById("btn-open-service-modal");
     const btnCloseServiceModal = document.getElementById("btn-close-service-modal");
@@ -2448,62 +2439,33 @@ document.addEventListener("DOMContentLoaded", function () {
         };
     }
 
+    const refreshServicePreview = () =>
+        renderServiceImagePreview(pendingServiceImage, serviceNameInput ? serviceNameInput.value : "Dịch vụ", getCurrentServiceArtMeta());
+
     if (servicePriceInput && serviceOriginalPriceInput) {
-        servicePriceInput.addEventListener("input", function () {
-            syncDiscountInputs(servicePriceInput, serviceOriginalPriceInput, serviceDiscountInput);
-        });
-        serviceOriginalPriceInput.addEventListener("input", function () {
-            syncDiscountInputs(servicePriceInput, serviceOriginalPriceInput, serviceDiscountInput);
-        });
+        const onServicePriceInput = () => syncDiscountInputs(servicePriceInput, serviceOriginalPriceInput, serviceDiscountInput);
+        servicePriceInput.addEventListener("input", onServicePriceInput);
+        serviceOriginalPriceInput.addEventListener("input", onServicePriceInput);
     }
 
-    if (serviceCategorySelect) {
-        serviceCategorySelect.addEventListener("change", function () {
-            if (!pendingServiceImage) {
-                renderServiceImagePreview("", serviceNameInput ? serviceNameInput.value : "Dịch vụ", getCurrentServiceArtMeta());
-            }
+    [serviceCategorySelect, serviceArtSelect].forEach(el => {
+        if (!el) return;
+        el.addEventListener("change", function () {
+            if (!pendingServiceImage) refreshServicePreview();
         });
-    }
+    });
 
-    if (serviceArtSelect) {
-        serviceArtSelect.addEventListener("change", function () {
-            if (!pendingServiceImage) {
-                renderServiceImagePreview("", serviceNameInput ? serviceNameInput.value : "Dịch vụ", getCurrentServiceArtMeta());
-            }
-        });
-    }
-
-    if (btnChooseServiceImage && serviceImageInput) {
-        btnChooseServiceImage.addEventListener("click", function () {
-            serviceImageInput.click();
-        });
-
-        serviceImageInput.addEventListener("change", function () {
-            const file = serviceImageInput.files && serviceImageInput.files[0];
-            if (!file) return;
-            AppUI.readImageFile(file, 480)
-                .then(function (dataUrl) {
-                    pendingServiceImage = dataUrl;
-                    renderServiceImagePreview(pendingServiceImage, serviceNameInput ? serviceNameInput.value : "Dịch vụ", getCurrentServiceArtMeta());
-                })
-                .catch(function (err) {
-                    AppUI.error({
-                        title: "Không thể tải hình ảnh dịch vụ",
-                        message: err && err.message ? err.message : "Vui lòng chọn tệp ảnh hợp lệ."
-                    });
-                })
-                .finally(function () {
-                    serviceImageInput.value = "";
-                });
-        });
-    }
-
-    if (btnRemoveServiceImage) {
-        btnRemoveServiceImage.addEventListener("click", function () {
-            pendingServiceImage = "";
-            renderServiceImagePreview("", serviceNameInput ? serviceNameInput.value : "Dịch vụ", getCurrentServiceArtMeta());
-        });
-    }
+    bindImageUploadControls({
+        chooseBtn: btnChooseServiceImage,
+        removeBtn: btnRemoveServiceImage,
+        fileInput: serviceImageInput,
+        maxSize: 480,
+        errTitle: "Không thể tải hình ảnh dịch vụ",
+        onSetImage: function (dataUrl) {
+            pendingServiceImage = dataUrl;
+            refreshServicePreview();
+        }
+    });
 
     if (btnOpenServiceModal) {
         btnOpenServiceModal.addEventListener("click", function () {
@@ -2533,20 +2495,11 @@ document.addEventListener("DOMContentLoaded", function () {
             const target = document.getElementById("modal-service-target").value;
             const location = document.getElementById("modal-service-location").value;
             const duration = document.getElementById("modal-service-duration").value.trim();
-            const price = Math.max(0, Math.round(Number(document.getElementById("modal-service-price").value) || 0));
-            const rawOrigStr = document.getElementById("modal-service-original-price").value.trim();
-            let discount = Math.min(99, Math.max(0, Math.round(Number(document.getElementById("modal-service-discount").value) || 0)));
-            let originalPrice = rawOrigStr !== "" ? Math.max(0, Math.round(Number(rawOrigStr) || 0)) : 0;
-
-            if (originalPrice > 0 && originalPrice < price) {
-                originalPrice = price;
-            }
-            if (originalPrice === 0 && discount > 0 && price > 0) {
-                originalPrice = Math.round(price / (1 - discount / 100));
-            }
-            if (originalPrice <= price && discount === 0) {
-                originalPrice = price;
-            }
+            const { price, originalPrice, discount } = normalizeCatalogPricing(
+                document.getElementById("modal-service-price").value,
+                document.getElementById("modal-service-original-price").value,
+                document.getElementById("modal-service-discount").value
+            );
 
             const artType = document.getElementById("modal-service-art").value || "mom-spa";
             const specBadge = document.getElementById("modal-service-spec").value.trim();
@@ -2656,7 +2609,7 @@ document.addEventListener("DOMContentLoaded", function () {
         });
     }
 
-    // 4b. Modal Thêm / Sửa Sản Phẩm (đồng bộ với Khách Hàng)
+    /* Modal sản phẩm */
     const productModal = document.getElementById("product-modal");
     const btnOpenProductModal = document.getElementById("btn-open-product-modal");
     const btnCloseProductModal = document.getElementById("btn-close-product-modal");
@@ -2679,62 +2632,33 @@ document.addEventListener("DOMContentLoaded", function () {
         };
     }
 
-    function syncProductDiscountFromPrices() {
-        syncDiscountInputs(productPriceInput, productOriginalPriceInput, productDiscountInput);
-    }
+    const refreshProductPreview = () =>
+        renderProductImagePreview(pendingProductImage, productNameInput ? productNameInput.value : "Sản phẩm", getCurrentProductArtMeta());
 
     if (productPriceInput && productOriginalPriceInput) {
-        productPriceInput.addEventListener("input", syncProductDiscountFromPrices);
-        productOriginalPriceInput.addEventListener("input", syncProductDiscountFromPrices);
+        const onProductPriceInput = () => syncDiscountInputs(productPriceInput, productOriginalPriceInput, productDiscountInput);
+        productPriceInput.addEventListener("input", onProductPriceInput);
+        productOriginalPriceInput.addEventListener("input", onProductPriceInput);
     }
 
-    if (productCategorySelect) {
-        productCategorySelect.addEventListener("change", function () {
-            if (!pendingProductImage) {
-                renderProductImagePreview("", productNameInput ? productNameInput.value : "Sản phẩm", getCurrentProductArtMeta());
-            }
+    [productCategorySelect, productArtSelect].forEach(el => {
+        if (!el) return;
+        el.addEventListener("change", function () {
+            if (!pendingProductImage) refreshProductPreview();
         });
-    }
+    });
 
-    if (productArtSelect) {
-        productArtSelect.addEventListener("change", function () {
-            if (!pendingProductImage) {
-                renderProductImagePreview("", productNameInput ? productNameInput.value : "Sản phẩm", getCurrentProductArtMeta());
-            }
-        });
-    }
-
-    if (btnChooseProductImage && productImageInput) {
-        btnChooseProductImage.addEventListener("click", function () {
-            productImageInput.click();
-        });
-
-        productImageInput.addEventListener("change", function () {
-            const file = productImageInput.files && productImageInput.files[0];
-            if (!file) return;
-            AppUI.readImageFile(file, 480)
-                .then(function (dataUrl) {
-                    pendingProductImage = dataUrl;
-                    renderProductImagePreview(pendingProductImage, productNameInput ? productNameInput.value : "Sản phẩm", getCurrentProductArtMeta());
-                })
-                .catch(function (err) {
-                    AppUI.error({
-                        title: "Không thể tải hình ảnh sản phẩm",
-                        message: err && err.message ? err.message : "Vui lòng chọn tệp ảnh hợp lệ."
-                    });
-                })
-                .finally(function () {
-                    productImageInput.value = "";
-                });
-        });
-    }
-
-    if (btnRemoveProductImage) {
-        btnRemoveProductImage.addEventListener("click", function () {
-            pendingProductImage = "";
-            renderProductImagePreview("", productNameInput ? productNameInput.value : "Sản phẩm", getCurrentProductArtMeta());
-        });
-    }
+    bindImageUploadControls({
+        chooseBtn: btnChooseProductImage,
+        removeBtn: btnRemoveProductImage,
+        fileInput: productImageInput,
+        maxSize: 480,
+        errTitle: "Không thể tải hình ảnh sản phẩm",
+        onSetImage: function (dataUrl) {
+            pendingProductImage = dataUrl;
+            refreshProductPreview();
+        }
+    });
 
     if (btnOpenProductModal) {
         btnOpenProductModal.addEventListener("click", function () {
@@ -2769,20 +2693,11 @@ document.addEventListener("DOMContentLoaded", function () {
             const age = document.getElementById("modal-product-age").value;
             const type = document.getElementById("modal-product-type").value;
             const shipping = document.getElementById("modal-product-shipping").value;
-            const price = Math.max(0, Math.round(Number(document.getElementById("modal-product-price").value) || 0));
-            const rawOrigStr = document.getElementById("modal-product-original-price").value.trim();
-            let discount = Math.min(99, Math.max(0, Math.round(Number(document.getElementById("modal-product-discount").value) || 0)));
-            let originalPrice = rawOrigStr !== "" ? Math.max(0, Math.round(Number(rawOrigStr) || 0)) : 0;
-
-            if (originalPrice > 0 && originalPrice < price) {
-                originalPrice = price;
-            }
-            if (originalPrice === 0 && discount > 0 && price > 0) {
-                originalPrice = Math.round(price / (1 - discount / 100));
-            }
-            if (originalPrice <= price && discount === 0) {
-                originalPrice = price;
-            }
+            const { price, originalPrice, discount } = normalizeCatalogPricing(
+                document.getElementById("modal-product-price").value,
+                document.getElementById("modal-product-original-price").value,
+                document.getElementById("modal-product-discount").value
+            );
 
             const artType = document.getElementById("modal-product-art").value || "milk-can";
             const specBadge = document.getElementById("modal-product-spec").value.trim();
@@ -2885,7 +2800,7 @@ document.addEventListener("DOMContentLoaded", function () {
                 return;
             }
 
-            const imageLabel = isCustomProductImage(pendingProductImage) ? "Ảnh tùy chỉnh đã tải lên" : "Ảnh minh họa mặc định";
+            const imageLabel = isCustomUploadedImage(pendingProductImage) ? "Ảnh tùy chỉnh đã tải lên" : "Ảnh minh họa mặc định";
             pendingProductImage = "";
             renderProductsTable();
             renderReport();
@@ -2898,14 +2813,14 @@ document.addEventListener("DOMContentLoaded", function () {
                     ["Mã sản phẩm", finalCode],
                     ["Tên sản phẩm", name],
                     ["Danh mục", `${category} · ${age}`],
-                    ["Giá bán", discount > 0 ? `${formatProductVnd(price)} (Giảm ${discount}%)` : formatProductVnd(price)],
+                    ["Giá bán", discount > 0 ? `${formatCatalogVnd(price)} (Giảm ${discount}%)` : formatCatalogVnd(price)],
                     ["Hình ảnh", imageLabel]
                 ]
             });
         });
     }
 
-    // 5. Khởi tạo Báo cáo & Thống kê
+    /* Báo cáo & thống kê */
     const reportPeriod = document.getElementById("report-period");
     const btnReportRefresh = document.getElementById("btn-report-refresh");
     const btnReportExport = document.getElementById("btn-report-export");
@@ -2917,6 +2832,10 @@ document.addEventListener("DOMContentLoaded", function () {
 
     if (btnReportRefresh) {
         btnReportRefresh.addEventListener("click", function () {
+            if (typeof AppData.refreshFromDatabase === "function") {
+                AppData.refreshFromDatabase();
+                staffList = AppData.loadStaff();
+            }
             renderStaffTable();
             renderServicesTable();
             renderProductsTable();
@@ -2987,7 +2906,7 @@ document.addEventListener("DOMContentLoaded", function () {
         reportDetailSearch.addEventListener("input", renderReportKpiDetailContent);
     }
 
-    // 5b. Lưu chỉnh sửa Khách Hàng từ Báo Cáo
+    /* Sửa khách hàng */
     const customerAdminModal = document.getElementById("customer-admin-modal");
     const btnCloseCustomerAdminModal = document.getElementById("btn-close-customer-admin-modal");
     const customerAdminForm = document.getElementById("customer-admin-modal-form");
@@ -3064,19 +2983,15 @@ document.addEventListener("DOMContentLoaded", function () {
             }
 
             if (origEmail && newEmailLower !== origEmail) {
-                try {
-                    const bookings = JSON.parse(localStorage.getItem("myServices")) || [];
-                    let bChanged = false;
-                    bookings.forEach(bk => {
-                        if (bk && (bk.customerEmail || "").trim().toLowerCase() === origEmail) {
-                            bk.customerEmail = newEmail;
-                            bChanged = true;
-                        }
-                    });
-                    if (bChanged) localStorage.setItem("myServices", JSON.stringify(bookings));
-                } catch (err) {
-                    // ignore
-                }
+                const bookings = AppData.loadServiceBookings();
+                let bChanged = false;
+                bookings.forEach(bk => {
+                    if (bk && (bk.customerEmail || "").trim().toLowerCase() === origEmail) {
+                        bk.customerEmail = newEmail;
+                        bChanged = true;
+                    }
+                });
+                if (bChanged) AppData.saveServiceBookings(bookings);
 
                 const orders = AppData.loadProductOrders();
                 let oChanged = false;
@@ -3088,12 +3003,10 @@ document.addEventListener("DOMContentLoaded", function () {
                 });
                 if (oChanged) AppData.saveProductOrders(orders);
 
-                const oldCartKey = AppData.CART_KEY + "_" + origEmail;
-                const newCartKey = AppData.CART_KEY + "_" + newEmailLower;
-                const oldCartVal = localStorage.getItem(oldCartKey);
-                if (oldCartVal !== null) {
-                    localStorage.setItem(newCartKey, oldCartVal);
-                    localStorage.removeItem(oldCartKey);
+                const oldCart = AppData.loadCart(origEmail);
+                if (oldCart.length > 0) {
+                    AppData.saveCart(newEmailLower, oldCart);
+                    AppData.saveCart(origEmail, []);
                 }
             }
 
@@ -3127,7 +3040,7 @@ document.addEventListener("DOMContentLoaded", function () {
         });
     }
 
-    // 5c. Lưu chỉnh sửa Lượt Đăng Ký Dịch Vụ từ Báo Cáo
+    /* Sửa đăng ký dịch vụ */
     const bookingAdminModal = document.getElementById("booking-admin-modal");
     const btnCloseBookingAdminModal = document.getElementById("btn-close-booking-admin-modal");
     const bookingAdminForm = document.getElementById("booking-admin-modal-form");
@@ -3152,12 +3065,7 @@ document.addEventListener("DOMContentLoaded", function () {
             const customerEmail = document.getElementById("modal-booking-customer-email").value.trim();
             const customerPhone = document.getElementById("modal-booking-customer-phone").value.trim();
 
-            let bookings = [];
-            try {
-                bookings = JSON.parse(localStorage.getItem("myServices")) || [];
-            } catch (err) {
-                bookings = [];
-            }
+            const bookings = AppData.loadServiceBookings();
             if (isNaN(realIdx) || realIdx < 0 || realIdx >= bookings.length) {
                 AppUI.error({
                     title: "Không tìm thấy lượt đăng ký",
@@ -3179,7 +3087,13 @@ document.addEventListener("DOMContentLoaded", function () {
                 customerPhone: customerPhone
             });
 
-            localStorage.setItem("myServices", JSON.stringify(bookings));
+            if (!AppData.saveServiceBookings(bookings)) {
+                AppUI.error({
+                    title: "Không thể lưu dữ liệu",
+                    message: "Không thể cập nhật lượt đăng ký dịch vụ vào cơ sở dữ liệu."
+                });
+                return;
+            }
             bookingAdminModal.classList.add("hidden");
             renderReport();
 
@@ -3195,7 +3109,7 @@ document.addEventListener("DOMContentLoaded", function () {
         });
     }
 
-    // 5c2. Lưu chỉnh sửa Đơn Hàng Sản Phẩm từ Báo Cáo
+    /* Sửa đơn hàng sản phẩm */
     const orderAdminModal = document.getElementById("order-admin-modal");
     const btnCloseOrderAdminModal = document.getElementById("btn-close-order-admin-modal");
     const orderAdminForm = document.getElementById("order-admin-modal-form");
@@ -3295,7 +3209,7 @@ document.addEventListener("DOMContentLoaded", function () {
         });
     }
 
-    // 5d. Lưu chỉnh sửa Ca Trực từ Báo Cáo
+    /* Sửa ca trực */
     const shiftAdminModal = document.getElementById("shift-admin-modal");
     const btnCloseShiftAdminModal = document.getElementById("btn-close-shift-admin-modal");
     const shiftAdminForm = document.getElementById("shift-admin-modal-form");
@@ -3405,11 +3319,7 @@ document.addEventListener("DOMContentLoaded", function () {
         }
         if (e.key === "users" || e.key === "facilityStaffList" || e.key === AppData.SHIFTS_KEY || e.key === "myServices" || e.key === AppData.PRODUCT_ORDERS_KEY || e.key === "khachHangProfile") {
             if (e.key === "facilityStaffList") {
-                try {
-                    staffList = JSON.parse(localStorage.getItem("facilityStaffList")) || [];
-                } catch (err) {
-                    staffList = [];
-                }
+                staffList = AppData.loadStaff();
             }
             renderStaffTable();
             renderReport();

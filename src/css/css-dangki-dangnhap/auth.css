@@ -30,7 +30,7 @@ body {
     flex-direction: column;
 }
 
-/* Thanh thông tin đầu trang */
+/* Thanh thông báo đầu trang */
 .auth-top-strip {
     background: linear-gradient(90deg, #ff4d8d 0%, #fb7185 52%, #f43f5e 100%);
     color: #ffffff;

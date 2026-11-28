@@ -17,9 +17,19 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    /* =========================================================
-       TOAST THÔNG BÁO NHANH
-       ========================================================= */
+    function debounce(fn, delayMs) {
+        let timer = null;
+        return function() {
+            const ctx = this;
+            const args = arguments;
+            clearTimeout(timer);
+            timer = setTimeout(function() {
+                fn.apply(ctx, args);
+            }, delayMs);
+        };
+    }
+
+    /* Toast thông báo */
     const toastEl = document.getElementById('kh-toast');
     let toastTimer = null;
     function showToast(msg) {
@@ -32,9 +42,180 @@ document.addEventListener('DOMContentLoaded', function() {
         }, 2400);
     }
 
-    /* =========================================================
-       PHẦN 1: THÔNG TIN CÁ NHÂN, ẢNH ĐẠI DIỆN, DỊCH VỤ & ĐƠN HÀNG
-       ========================================================= */
+    /* Điều hướng tab tài khoản & đơn hàng */
+    const hubTabs = document.querySelectorAll('#thong-tin [data-kh-tab]');
+    const hubPanes = document.querySelectorAll('#thong-tin [data-kh-pane]');
+
+    function switchHubTab(tabKey) {
+        const key = tabKey || 'profile';
+        hubTabs.forEach(btn => {
+            const active = btn.getAttribute('data-kh-tab') === key;
+            btn.classList.toggle('active', active);
+            btn.setAttribute('aria-selected', active ? 'true' : 'false');
+        });
+        hubPanes.forEach(pane => {
+            pane.classList.toggle('active', pane.getAttribute('data-kh-pane') === key);
+        });
+    }
+
+    hubTabs.forEach(btn => {
+        btn.addEventListener('click', function() {
+            switchHubTab(this.getAttribute('data-kh-tab'));
+        });
+    });
+
+    document.querySelectorAll('[data-switch-tab]').forEach(el => {
+        el.addEventListener('click', function() {
+            switchHubTab(this.getAttribute('data-switch-tab'));
+        });
+    });
+
+    document.querySelectorAll('[data-jump-tab]').forEach(el => {
+        el.addEventListener('click', function() {
+            switchHubTab(this.getAttribute('data-jump-tab'));
+        });
+    });
+
+    const btnOpenOffers = document.getElementById('btn-open-offers');
+    if (btnOpenOffers) {
+        btnOpenOffers.addEventListener('click', function() {
+            switchHubTab('offers');
+            const hubEl = document.getElementById('thong-tin');
+            if (hubEl) hubEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        });
+    }
+
+    /* Engine carousel tự động chạy mượt GPU */
+    const sliderRegistry = [];
+    document.addEventListener('visibilitychange', function() {
+        sliderRegistry.forEach(ctrl => ctrl.syncVisibility());
+    });
+
+    function mountAutoSlider(cfg) {
+        const {
+            container,
+            slides,
+            intervalMs,
+            initialDelayMs,
+            renderSlide,
+            dotsClass,
+            dotClass,
+            onSlideClick
+        } = cfg;
+        if (!container || !Array.isArray(slides) || slides.length === 0) return null;
+
+        container.innerHTML = '';
+        const track = document.createElement('div');
+        track.className = 'kh-slider-track';
+
+        slides.forEach((slide, idx) => {
+            const slideEl = document.createElement('div');
+            slideEl.className = 'kh-slider-slide';
+            slideEl.innerHTML = renderSlide(slide, idx);
+            if (typeof onSlideClick === 'function') {
+                slideEl.addEventListener('click', function() {
+                    onSlideClick(slide, idx);
+                });
+            }
+            track.appendChild(slideEl);
+        });
+        container.appendChild(track);
+
+        let curIdx = 0;
+        let timer = null;
+        let paused = false;
+        const dots = [];
+
+        function goTo(nextIdx) {
+            curIdx = (nextIdx + slides.length) % slides.length;
+            track.style.transform = `translate3d(-${curIdx * 100}%, 0, 0)`;
+            dots.forEach((d, i) => d.classList.toggle('active', i === curIdx));
+        }
+
+        if (slides.length > 1) {
+            const btnPrev = document.createElement('button');
+            btnPrev.type = 'button';
+            btnPrev.className = 'kh-slider-arrow prev';
+            btnPrev.setAttribute('aria-label', 'Banner trước');
+            btnPrev.innerHTML = '&lsaquo;';
+            btnPrev.addEventListener('click', function(e) {
+                e.stopPropagation();
+                goTo(curIdx - 1);
+            });
+
+            const btnNext = document.createElement('button');
+            btnNext.type = 'button';
+            btnNext.className = 'kh-slider-arrow next';
+            btnNext.setAttribute('aria-label', 'Banner sau');
+            btnNext.innerHTML = '&rsaquo;';
+            btnNext.addEventListener('click', function(e) {
+                e.stopPropagation();
+                goTo(curIdx + 1);
+            });
+
+            const dotsWrap = document.createElement('div');
+            dotsWrap.className = dotsClass || 'kh-slider-dots';
+            slides.forEach((_, idx) => {
+                const dot = document.createElement('button');
+                dot.type = 'button';
+                dot.className = (dotClass || 'kh-slider-dot') + (idx === 0 ? ' active' : '');
+                dot.setAttribute('aria-label', `Slide ${idx + 1}`);
+                dot.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    goTo(idx);
+                });
+                dots.push(dot);
+                dotsWrap.appendChild(dot);
+            });
+
+            container.appendChild(btnPrev);
+            container.appendChild(btnNext);
+            container.appendChild(dotsWrap);
+
+            function startTimer() {
+                if (timer || document.hidden || paused) return;
+                timer = setInterval(function() {
+                    if (!document.hidden && !paused) {
+                        goTo(curIdx + 1);
+                    }
+                }, intervalMs || 4800);
+            }
+
+            function stopTimer() {
+                if (timer) {
+                    clearInterval(timer);
+                    timer = null;
+                }
+            }
+
+            container.addEventListener('mouseenter', function() {
+                paused = true;
+                stopTimer();
+            });
+            container.addEventListener('mouseleave', function() {
+                paused = false;
+                startTimer();
+            });
+
+            const ctrl = {
+                syncVisibility: function() {
+                    if (document.hidden) stopTimer();
+                    else startTimer();
+                }
+            };
+            sliderRegistry.push(ctrl);
+
+            if (initialDelayMs > 0) {
+                setTimeout(startTimer, initialDelayMs);
+            } else {
+                startTimer();
+            }
+        }
+
+        return container;
+    }
+
+    /* Hồ sơ, dịch vụ & đơn hàng */
     const profileDisplay = document.getElementById('profile-display');
     const profileForm = document.getElementById('profile-form');
     const btnEdit = document.getElementById('btn-edit');
@@ -133,18 +314,133 @@ document.addEventListener('DOMContentLoaded', function() {
         avatarPreview.innerHTML = '';
         avatarPreview.appendChild(AppUI.createAvatar(src, name || 'Khách hàng', 88));
         if (btnRemoveAvatar) {
-            if (src) {
-                btnRemoveAvatar.classList.remove('hidden');
-            } else {
-                btnRemoveAvatar.classList.add('hidden');
-            }
+            btnRemoveAvatar.classList.toggle('hidden', !src);
         }
     }
 
-    function isBookingOfCurrentCustomer(booking) {
-        if (!booking) return false;
-        if (!booking.customerEmail) return true;
-        return booking.customerEmail.toLowerCase() === (currentUser.email || '').toLowerCase();
+    function isBookingOfCurrentCustomer(record) {
+        if (!record) return false;
+        if (!record.customerEmail) return true;
+        return record.customerEmail.toLowerCase() === (currentUser.email || '').toLowerCase();
+    }
+
+    function buildEmptyIllustrationLi(kind, message, btnText, targetSectionId) {
+        const svg = kind === 'orders'
+            ? `<svg viewBox="0 0 120 100" width="96" height="80" fill="none" aria-hidden="true">
+                <circle cx="60" cy="50" r="42" fill="#fff1f6"/>
+                <rect x="30" y="34" width="60" height="40" rx="8" fill="#ffffff" stroke="#ff4d8d" stroke-width="2.5"/>
+                <path d="M44 34v-6a16 16 0 0 1 32 0v6" stroke="#ff4d8d" stroke-width="2.5" stroke-linecap="round"/>
+                <path d="M46 54h28M52 63h16" stroke="#fbcfe8" stroke-width="3" stroke-linecap="round"/>
+               </svg>`
+            : `<svg viewBox="0 0 120 100" width="96" height="80" fill="none" aria-hidden="true">
+                <circle cx="60" cy="50" r="42" fill="#eff6ff"/>
+                <rect x="34" y="28" width="52" height="54" rx="10" fill="#ffffff" stroke="#0284c7" stroke-width="2.5"/>
+                <rect x="55" y="42" width="10" height="26" rx="3" fill="#ff4d8d"/>
+                <rect x="47" y="50" width="26" height="10" rx="3" fill="#ff4d8d"/>
+               </svg>`;
+        const li = document.createElement('li');
+        li.className = 'kh-empty-state';
+        li.innerHTML = `
+            ${svg}
+            <p>${AppUI.escapeHtml(message)}</p>
+            <button type="button" class="btn-primary kh-empty-cta">${AppUI.escapeHtml(btnText)}</button>
+        `;
+        const btn = li.querySelector('.kh-empty-cta');
+        if (btn) {
+            btn.addEventListener('click', function() {
+                const target = document.getElementById(targetSectionId);
+                if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            });
+        }
+        return li;
+    }
+
+    function buildCustomerRequestMeta(rec, nounLower, cancelLabel, lockLabel) {
+        const isRecalled = rec.status === 'recalled' || Boolean(rec.recalledBy);
+        const isConfirmed = !isRecalled && (rec.status === 'confirmed' || Boolean(rec.confirmedBy));
+        const confirmedTime = rec.confirmedAt ? new Date(rec.confirmedAt).toLocaleString('vi-VN') : '';
+        const confirmerName = rec.confirmedBy || 'Nhân viên';
+        const recalledTime = rec.recalledAt ? new Date(rec.recalledAt).toLocaleString('vi-VN') : '';
+        const recallerName = rec.recalledBy || 'Nhân viên';
+        const recallMessage = (rec.recallMessage || '').trim();
+
+        const statusBadgeHtml = isRecalled
+            ? `<span class="booked-status-pill recalled">! Đã thu hồi</span>`
+            : (isConfirmed
+                ? `<span class="booked-status-pill confirmed">✓ Đã xác nhận</span>`
+                : `<span class="booked-status-pill pending">Chờ nhân viên xác nhận</span>`);
+
+        const noteHtml = isRecalled
+            ? `<div class="booked-recalled-note"><div><strong>! ${nounLower === 'đơn hàng' ? 'Đơn hàng' : 'Dịch vụ'} đã bị thu hồi bởi nhân viên:</strong> ${AppUI.escapeHtml(recallerName)}${recalledTime ? ` (${AppUI.escapeHtml(recalledTime)})` : ''}</div>${recallMessage ? `<div style="margin-top:4px;"><strong>Lời nhắn:</strong> ${AppUI.escapeHtml(recallMessage)}</div>` : ''}</div>`
+            : (isConfirmed
+                ? `<div class="booked-confirmed-note">✓ Đã xác nhận bởi nhân viên: ${AppUI.escapeHtml(confirmerName)}${confirmedTime ? ` (${AppUI.escapeHtml(confirmedTime)})` : ''} · Không thể ${lockLabel}</div>`
+                : '');
+
+        const cancelBtnHtml = isRecalled
+            ? `<button type="button" class="booked-btn-locked" disabled title="${nounLower === 'đơn hàng' ? 'Đơn hàng' : 'Dịch vụ'} đã bị nhân viên thu hồi">Đã thu hồi</button>`
+            : (isConfirmed
+                ? `<button type="button" class="booked-btn-locked" disabled title="Nhân viên đã xác nhận ${nounLower}, không thể ${lockLabel}">Không thể ${lockLabel}</button>`
+                : `<button type="button" class="booked-btn-cancel">${cancelLabel}</button>`);
+
+        const detailStatusText = isRecalled
+            ? `Đã thu hồi bởi ${recallerName}`
+            : (isConfirmed ? `Đã xác nhận bởi ${confirmerName}` : 'Chờ nhân viên xác nhận');
+
+        return {
+            isRecalled,
+            isConfirmed,
+            confirmedTime,
+            recalledTime,
+            recallMessage,
+            statusBadgeHtml,
+            noteHtml,
+            cancelBtnHtml,
+            detailStatusText
+        };
+    }
+
+    function appendRequestStatusRows(rows, meta) {
+        if (meta.isRecalled) {
+            if (meta.recallMessage) rows.splice(2, 0, ['Lời nhắn thu hồi', meta.recallMessage]);
+            if (meta.recalledTime) rows.splice(2, 0, ['Thời gian thu hồi', meta.recalledTime]);
+        } else if (meta.isConfirmed && meta.confirmedTime) {
+            rows.splice(2, 0, ['Thời gian xác nhận', meta.confirmedTime]);
+        }
+    }
+
+    function isCancelBlocked(target, nounCap, nounLower, reloadFn) {
+        if (!target) return false;
+        if (target.status === 'recalled' || target.recalledBy) {
+            reloadFn();
+            AppUI.warning({
+                title: `${nounCap} đã bị thu hồi`,
+                message: `${nounCap} này đã được nhân viên "${target.recalledBy || 'Nhân viên'}" thu hồi.${target.recallMessage ? ` Lời nhắn: ${target.recallMessage}` : ''}`
+            });
+            return true;
+        }
+        if (target.status === 'confirmed' || target.confirmedBy) {
+            reloadFn();
+            AppUI.warning({
+                title: `Không thể ${nounLower === 'đơn hàng' ? 'hủy đơn hàng' : 'thu hồi dịch vụ'}`,
+                message: `${nounCap} này đã được nhân viên "${target.confirmedBy || 'Nhân viên'}" xác nhận nên không thể ${nounLower === 'đơn hàng' ? 'hủy' : 'thu hồi'}.`
+            });
+            return true;
+        }
+        return false;
+    }
+
+    function updateOrderCountBadges(count) {
+        ['hub-order-count', 'stat-order-count'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.textContent = String(count);
+        });
+    }
+
+    function updateServiceCountBadges(count) {
+        ['inline-service-count', 'hub-service-count', 'stat-service-count'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.textContent = String(count);
+        });
     }
 
     function renderMyProductOrders() {
@@ -154,14 +450,17 @@ document.addEventListener('DOMContentLoaded', function() {
         const allOrders = AppData.loadProductOrders();
         const myOrders = [];
         allOrders.forEach((order, realIndex) => {
-            if (order && (!order.customerEmail || order.customerEmail.toLowerCase() === (currentUser.email || '').toLowerCase())) {
+            if (isBookingOfCurrentCustomer(order)) {
                 myOrders.push({ order: order, realIndex: realIndex });
             }
         });
 
+        updateOrderCountBadges(myOrders.length);
         ordersListEl.innerHTML = '';
         if (myOrders.length === 0) {
-            ordersListEl.innerHTML = '<li>Chưa có đơn hàng sản phẩm nào.</li>';
+            ordersListEl.appendChild(
+                buildEmptyIllustrationLi('orders', 'Hiện ba mẹ chưa có thông tin đơn hàng sản phẩm nào', 'Mua sắm sản phẩm ngay', 'san-pham')
+            );
             return;
         }
 
@@ -175,13 +474,7 @@ document.addEventListener('DOMContentLoaded', function() {
             const items = Array.isArray(ord.items) ? ord.items : [];
             const itemCount = items.reduce((sum, it) => sum + (it.qty || 1), 0);
             const orderedTime = ord.orderedAt ? new Date(ord.orderedAt).toLocaleString('vi-VN') : (ord.date || '');
-            const isRecalled = ord.status === 'recalled' || Boolean(ord.recalledBy);
-            const isConfirmed = !isRecalled && (ord.status === 'confirmed' || Boolean(ord.confirmedBy));
-            const confirmedTime = ord.confirmedAt ? new Date(ord.confirmedAt).toLocaleString('vi-VN') : '';
-            const confirmerName = ord.confirmedBy || 'Nhân viên';
-            const recalledTime = ord.recalledAt ? new Date(ord.recalledAt).toLocaleString('vi-VN') : '';
-            const recallerName = ord.recalledBy || 'Nhân viên';
-            const recallMessage = (ord.recallMessage || '').trim();
+            const meta = buildCustomerRequestMeta(ord, 'đơn hàng', 'Hủy đơn', 'hủy đơn');
 
             const li = document.createElement('li');
             li.className = 'booked-detail-card';
@@ -203,33 +496,15 @@ document.addEventListener('DOMContentLoaded', function() {
                 `;
             }).join('');
 
-            const statusBadgeHtml = isRecalled
-                ? `<span class="booked-status-pill recalled">! Đã thu hồi</span>`
-                : (isConfirmed
-                    ? `<span class="booked-status-pill confirmed">✓ Đã xác nhận</span>`
-                    : `<span class="booked-status-pill pending">Chờ nhân viên xác nhận</span>`);
-
-            const confirmedNoteHtml = isRecalled
-                ? `<div class="booked-recalled-note"><div><strong>! Đơn hàng đã bị thu hồi bởi nhân viên:</strong> ${AppUI.escapeHtml(recallerName)}${recalledTime ? ` (${AppUI.escapeHtml(recalledTime)})` : ''}</div>${recallMessage ? `<div style="margin-top:4px;"><strong>Lời nhắn:</strong> ${AppUI.escapeHtml(recallMessage)}</div>` : ''}</div>`
-                : (isConfirmed
-                    ? `<div class="booked-confirmed-note">✓ Đã xác nhận bởi nhân viên: ${AppUI.escapeHtml(confirmerName)}${confirmedTime ? ` (${AppUI.escapeHtml(confirmedTime)})` : ''} · Không thể hủy đơn</div>`
-                    : '');
-
-            const cancelActionHtml = isRecalled
-                ? `<button type="button" class="booked-btn-locked" disabled title="Đơn hàng đã bị nhân viên thu hồi">Đã thu hồi</button>`
-                : (isConfirmed
-                    ? `<button type="button" class="booked-btn-locked" disabled title="Nhân viên đã xác nhận đơn hàng, không thể hủy">Không thể hủy</button>`
-                    : `<button type="button" class="booked-btn-cancel">Hủy đơn</button>`);
-
             li.innerHTML = `
                 <div class="booked-detail-top">
                     <div>
                         <span class="booked-code-label">Đơn ${AppUI.escapeHtml(ord.code || '—')}</span>
                         <span class="booked-date-label"> · ${AppUI.escapeHtml(orderedTime)} · ${itemCount} sản phẩm</span>
                     </div>
-                    ${statusBadgeHtml}
+                    ${meta.statusBadgeHtml}
                 </div>
-                ${confirmedNoteHtml}
+                ${meta.noteHtml}
                 <div class="booked-order-items">${itemRowsHtml || '<div style="color: var(--text-muted);">Không có chi tiết sản phẩm</div>'}</div>
                 <div class="booked-meta-line">
                     <strong>Người nhận:</strong> ${AppUI.escapeHtml(ord.customerName || 'Chưa cập nhật')} ·
@@ -240,7 +515,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     <span class="booked-total-price">Tổng tiền: ${formatCurrency(ord.totalAmount)}</span>
                     <div class="booked-btn-group">
                         <button type="button" class="booked-btn-detail">Chi tiết</button>
-                        ${cancelActionHtml}
+                        ${meta.cancelBtnHtml}
                     </div>
                 </div>
             `;
@@ -249,27 +524,15 @@ document.addEventListener('DOMContentLoaded', function() {
             const btnCancelOrder = li.querySelector('.booked-btn-cancel');
 
             btnDetail.addEventListener('click', function() {
-                const detailStatusText = isRecalled
-                    ? `Đã thu hồi bởi ${recallerName}`
-                    : (isConfirmed ? `Đã xác nhận bởi ${confirmerName}` : 'Chờ nhân viên xác nhận');
                 const detailRows = [
                     ['Mã đơn hàng', ord.code || '—'],
-                    ['Trạng thái', detailStatusText],
+                    ['Trạng thái', meta.detailStatusText],
                     ['Thời gian đặt', orderedTime || '—'],
                     ['Người nhận', `${ord.customerName || 'Chưa cập nhật'} (${ord.customerPhone || 'Chưa có SĐT'})`],
                     ['Địa chỉ giao hàng', ord.customerAddress || 'Chưa cập nhật'],
                     ['Tổng thanh toán', formatCurrency(ord.totalAmount)]
                 ];
-                if (isRecalled) {
-                    if (recallMessage) {
-                        detailRows.splice(2, 0, ['Lời nhắn thu hồi', recallMessage]);
-                    }
-                    if (recalledTime) {
-                        detailRows.splice(2, 0, ['Thời gian thu hồi', recalledTime]);
-                    }
-                } else if (isConfirmed && confirmedTime) {
-                    detailRows.splice(2, 0, ['Thời gian xác nhận', confirmedTime]);
-                }
+                appendRequestStatusRows(detailRows, meta);
 
                 AppUI.success({
                     title: `Chi tiết đơn hàng ${ord.code || ''}`,
@@ -304,23 +567,7 @@ document.addEventListener('DOMContentLoaded', function() {
                         cancelText: 'Giữ lại',
                         onConfirm: function() {
                             const latest = AppData.loadProductOrders();
-                            const target = latest[entry.realIndex];
-                            if (target && (target.status === 'recalled' || target.recalledBy)) {
-                                renderMyProductOrders();
-                                AppUI.warning({
-                                    title: 'Đơn hàng đã bị thu hồi',
-                                    message: `Đơn hàng này đã được nhân viên "${target.recalledBy || 'Nhân viên'}" thu hồi.${target.recallMessage ? ` Lời nhắn: ${target.recallMessage}` : ''}`
-                                });
-                                return;
-                            }
-                            if (target && (target.status === 'confirmed' || target.confirmedBy)) {
-                                renderMyProductOrders();
-                                AppUI.warning({
-                                    title: 'Không thể hủy đơn hàng',
-                                    message: `Đơn hàng này đã được nhân viên "${target.confirmedBy || 'Nhân viên'}" xác nhận nên không thể hủy.`
-                                });
-                                return;
-                            }
+                            if (isCancelBlocked(latest[entry.realIndex], 'Đơn hàng', 'đơn hàng', renderMyProductOrders)) return;
                             if (entry.realIndex >= 0 && entry.realIndex < latest.length) {
                                 latest.splice(entry.realIndex, 1);
                                 AppData.saveProductOrders(latest);
@@ -363,14 +610,8 @@ document.addEventListener('DOMContentLoaded', function() {
             profileAvatarName.textContent = displayName;
         }
 
-        // Tải danh sách dịch vụ đã đăng ký kèm nút Thu hồi
         const bookedListContainer = document.getElementById('my-booked-services-list');
-        let allBookedServices = [];
-        try {
-            allBookedServices = JSON.parse(localStorage.getItem('myServices')) || [];
-        } catch (err) {
-            allBookedServices = [];
-        }
+        const allBookedServices = AppData.loadServiceBookings();
 
         const myEntries = [];
         allBookedServices.forEach((item, realIndex) => {
@@ -379,14 +620,13 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
 
-        const inlineServiceCount = document.getElementById('inline-service-count');
-        if (inlineServiceCount) {
-            inlineServiceCount.textContent = String(myEntries.length);
-        }
+        updateServiceCountBadges(myEntries.length);
 
         bookedListContainer.innerHTML = '';
         if (myEntries.length === 0) {
-            bookedListContainer.innerHTML = '<li>Chưa có dịch vụ nào được đăng ký.</li>';
+            bookedListContainer.appendChild(
+                buildEmptyIllustrationLi('services', 'Hiện ba mẹ chưa đăng ký gói dịch vụ chăm sóc nào', 'Xem các gói dịch vụ', 'dich-vu')
+            );
         } else {
             const servicesList = AppData.loadServices();
             const svcById = new Map();
@@ -405,32 +645,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 const benefits = Array.isArray(matchedSvc.benefits) ? matchedSvc.benefits : [];
                 const priceLabel = matchedSvc.price > 0 ? formatCurrency(matchedSvc.price) : 'Liên hệ tư vấn';
                 const bookedTime = item.bookedAt ? new Date(item.bookedAt).toLocaleString('vi-VN') : (item.date || '');
-                const bookingCode = item.id || 'DV';
-                const isRecalled = item.status === 'recalled' || Boolean(item.recalledBy);
-                const isConfirmed = !isRecalled && (item.status === 'confirmed' || Boolean(item.confirmedBy));
-                const confirmedTime = item.confirmedAt ? new Date(item.confirmedAt).toLocaleString('vi-VN') : '';
-                const confirmerName = item.confirmedBy || 'Nhân viên';
-                const recalledTime = item.recalledAt ? new Date(item.recalledAt).toLocaleString('vi-VN') : '';
-                const recallerName = item.recalledBy || 'Nhân viên';
-                const recallMessage = (item.recallMessage || '').trim();
-
-                const statusBadgeHtml = isRecalled
-                    ? `<span class="booked-status-pill recalled">! Đã thu hồi</span>`
-                    : (isConfirmed
-                        ? `<span class="booked-status-pill confirmed">✓ Đã xác nhận</span>`
-                        : `<span class="booked-status-pill pending">Chờ nhân viên xác nhận</span>`);
-
-                const confirmedNoteHtml = isRecalled
-                    ? `<div class="booked-recalled-note"><div><strong>! Dịch vụ đã bị thu hồi bởi nhân viên:</strong> ${AppUI.escapeHtml(recallerName)}${recalledTime ? ` (${AppUI.escapeHtml(recalledTime)})` : ''}</div>${recallMessage ? `<div style="margin-top:4px;"><strong>Lời nhắn:</strong> ${AppUI.escapeHtml(recallMessage)}</div>` : ''}</div>`
-                    : (isConfirmed
-                        ? `<div class="booked-confirmed-note">✓ Đã xác nhận bởi nhân viên: ${AppUI.escapeHtml(confirmerName)}${confirmedTime ? ` (${AppUI.escapeHtml(confirmedTime)})` : ''} · Không thể thu hồi</div>`
-                        : '');
-
-                const cancelBtnHtml = isRecalled
-                    ? `<button type="button" class="booked-btn-locked" disabled title="Dịch vụ đã bị nhân viên thu hồi">Đã thu hồi</button>`
-                    : (isConfirmed
-                        ? `<button type="button" class="booked-btn-locked" disabled title="Nhân viên đã xác nhận dịch vụ, không thể thu hồi">Không thể thu hồi</button>`
-                        : `<button type="button" class="booked-btn-cancel">Thu hồi</button>`);
+                const bookingCode = item.id || 'DV_01';
+                const meta = buildCustomerRequestMeta(item, 'dịch vụ', 'Thu hồi', 'thu hồi');
 
                 const li = document.createElement('li');
                 li.className = 'booked-detail-card';
@@ -441,12 +657,12 @@ document.addEventListener('DOMContentLoaded', function() {
                             <span class="booked-code-label">Mã ${AppUI.escapeHtml(bookingCode)}</span>
                             <span class="booked-date-label"> · Đăng ký: ${AppUI.escapeHtml(bookedTime)}</span>
                         </div>
-                        ${statusBadgeHtml}
+                        ${meta.statusBadgeHtml}
                     </div>
-                    ${confirmedNoteHtml}
+                    ${meta.noteHtml}
                     <div class="booked-detail-main">
                         <div class="booked-service-left">
-                            <img src="${AppUI.escapeHtml(imgSrc)}" alt="${AppUI.escapeHtml(item.name)}" class="booked-thumb">
+                            <img src="${AppUI.escapeHtml(imgSrc)}" alt="${AppUI.escapeHtml(item.name)}" class="booked-thumb" loading="lazy" decoding="async">
                             <div>
                                 <div class="booked-item-title">${AppUI.escapeHtml(item.name || 'Dịch vụ chăm sóc')}</div>
                                 <div class="booked-meta-line">
@@ -463,7 +679,7 @@ document.addEventListener('DOMContentLoaded', function() {
                         <span class="booked-total-price">${priceLabel}${benefits.length > 0 ? ` · ${benefits.length} quyền lợi` : ''}</span>
                         <div class="booked-btn-group">
                             <button type="button" class="booked-btn-detail">Chi tiết</button>
-                            ${cancelBtnHtml}
+                            ${meta.cancelBtnHtml}
                         </div>
                     </div>
                 `;
@@ -472,28 +688,16 @@ document.addEventListener('DOMContentLoaded', function() {
                 const btnCancelService = li.querySelector('.booked-btn-cancel');
 
                 btnServiceDetail.addEventListener('click', function() {
-                    const serviceDetailStatus = isRecalled
-                        ? `Đã thu hồi bởi ${recallerName}`
-                        : (isConfirmed ? `Đã xác nhận bởi ${confirmerName}` : 'Chờ nhân viên xác nhận');
                     const detailsArr = [
                         ['Mã đăng ký', bookingCode],
-                        ['Trạng thái', serviceDetailStatus],
+                        ['Trạng thái', meta.detailStatusText],
                         ['Ngày giờ đăng ký', bookedTime || '—'],
                         ['Giá gói', priceLabel],
                         ['Thời lượng', matchedSvc.duration || 'Linh hoạt'],
                         ['Khách hàng', `${item.customerName || data.fullname || 'Chưa cập nhật'} (${item.customerPhone || data.phone || 'Chưa có SĐT'})`],
                         ['Mô tả', matchedSvc.desc || matchedSvc.shortDesc || 'Đang cập nhật']
                     ];
-                    if (isRecalled) {
-                        if (recallMessage) {
-                            detailsArr.splice(2, 0, ['Lời nhắn thu hồi', recallMessage]);
-                        }
-                        if (recalledTime) {
-                            detailsArr.splice(2, 0, ['Thời gian thu hồi', recalledTime]);
-                        }
-                    } else if (isConfirmed && confirmedTime) {
-                        detailsArr.splice(2, 0, ['Thời gian xác nhận', confirmedTime]);
-                    }
+                    appendRequestStatusRows(detailsArr, meta);
 
                     AppUI.profile({
                         avatar: imgSrc,
@@ -517,40 +721,17 @@ document.addEventListener('DOMContentLoaded', function() {
                     btnCancelService.addEventListener('click', function() {
                         AppUI.confirm({
                             title: 'Xác nhận thu hồi dịch vụ',
-                            message: `Bạn có chắc chắn muốn thu hồi dịch vụ "${item.name}" không?`,
+                            message: `Bạn có chắc chắn muốn thu hồi dịch vụ "${item.name}" (${bookingCode}) không?`,
                             danger: true,
                             confirmText: 'Thu hồi',
                             cancelText: 'Hủy',
                             onConfirm: function() {
-                                let latest = [];
-                                try {
-                                    latest = JSON.parse(localStorage.getItem('myServices')) || [];
-                                } catch (err) {
-                                    latest = [];
-                                }
-                                const target = latest[entry.realIndex];
-                                if (target && (target.status === 'recalled' || target.recalledBy)) {
-                                    loadProfileData();
-                                    AppUI.warning({
-                                        title: 'Dịch vụ đã bị thu hồi',
-                                        message: `Dịch vụ này đã được nhân viên "${target.recalledBy || 'Nhân viên'}" thu hồi.${target.recallMessage ? ` Lời nhắn: ${target.recallMessage}` : ''}`
-                                    });
-                                    return;
-                                }
-                                if (target && (target.status === 'confirmed' || target.confirmedBy)) {
-                                    loadProfileData();
-                                    AppUI.warning({
-                                        title: 'Không thể thu hồi dịch vụ',
-                                        message: `Dịch vụ này đã được nhân viên "${target.confirmedBy || 'Nhân viên'}" xác nhận nên không thể thu hồi.`
-                                    });
-                                    return;
-                                }
+                                const latest = AppData.loadServiceBookings();
+                                if (isCancelBlocked(latest[entry.realIndex], 'Dịch vụ', 'dịch vụ', loadProfileData)) return;
                                 if (entry.realIndex >= 0 && entry.realIndex < latest.length) {
                                     latest.splice(entry.realIndex, 1);
                                 }
-                                try {
-                                    localStorage.setItem('myServices', JSON.stringify(latest));
-                                } catch (err) {
+                                if (!AppData.saveServiceBookings(latest)) {
                                     AppUI.error({
                                         title: 'Lỗi lưu dữ liệu',
                                         message: 'Không thể cập nhật danh sách dịch vụ.'
@@ -563,7 +744,7 @@ document.addEventListener('DOMContentLoaded', function() {
                                 }
                                 AppUI.success({
                                     title: 'Đã thu hồi dịch vụ',
-                                    message: `Dịch vụ "${item.name}" đã được thu hồi khỏi danh sách của bạn.`
+                                    message: `Dịch vụ "${item.name}" (${bookingCode}) đã được thu hồi khỏi danh sách.`
                                 });
                             }
                         });
@@ -590,13 +771,7 @@ document.addEventListener('DOMContentLoaded', function() {
     function checkUnreadRecallNotices() {
         if (isShowingRecallModal || document.querySelector('.app-modal-overlay')) return;
 
-        let booked = [];
-        try {
-            booked = JSON.parse(localStorage.getItem('myServices')) || [];
-        } catch (err) {
-            booked = [];
-        }
-
+        const booked = AppData.loadServiceBookings();
         const orders = AppData.loadProductOrders();
         const shownServiceKeys = new Set();
         const shownOrderKeys = new Set();
@@ -646,45 +821,22 @@ document.addEventListener('DOMContentLoaded', function() {
             buttonText: 'Tôi đã hiểu',
             onClose: function() {
                 isShowingRecallModal = false;
-                if (shownServiceKeys.size > 0) {
-                    let latestBooked = [];
-                    try {
-                        latestBooked = JSON.parse(localStorage.getItem('myServices')) || [];
-                    } catch (err) {
-                        latestBooked = [];
-                    }
-                    let changedServices = false;
-                    latestBooked.forEach(bk => {
-                        if (!bk || !isBookingOfCurrentCustomer(bk)) return;
-                        const isRecalled = bk.status === 'recalled' || Boolean(bk.recalledBy);
-                        if (isRecalled && bk.recallSeenByCustomer === false && shownServiceKeys.has(getRecallNoticeKey('service', bk))) {
-                            bk.recallSeenByCustomer = true;
-                            changedServices = true;
+                const markSeen = (shownKeys, loadFn, saveFn, kind) => {
+                    if (shownKeys.size === 0) return;
+                    const latest = loadFn();
+                    let changed = false;
+                    latest.forEach(rec => {
+                        if (!rec || !isBookingOfCurrentCustomer(rec)) return;
+                        const isRecalled = rec.status === 'recalled' || Boolean(rec.recalledBy);
+                        if (isRecalled && rec.recallSeenByCustomer === false && shownKeys.has(getRecallNoticeKey(kind, rec))) {
+                            rec.recallSeenByCustomer = true;
+                            changed = true;
                         }
                     });
-                    if (changedServices) {
-                        try {
-                            localStorage.setItem('myServices', JSON.stringify(latestBooked));
-                        } catch (err) {
-                            // Bỏ qua lỗi lưu cờ đã xem thông báo
-                        }
-                    }
-                }
-                if (shownOrderKeys.size > 0) {
-                    const latestOrders = AppData.loadProductOrders();
-                    let changedOrders = false;
-                    latestOrders.forEach(ord => {
-                        if (!ord || !isBookingOfCurrentCustomer(ord)) return;
-                        const isRecalled = ord.status === 'recalled' || Boolean(ord.recalledBy);
-                        if (isRecalled && ord.recallSeenByCustomer === false && shownOrderKeys.has(getRecallNoticeKey('order', ord))) {
-                            ord.recallSeenByCustomer = true;
-                            changedOrders = true;
-                        }
-                    });
-                    if (changedOrders) {
-                        AppData.saveProductOrders(latestOrders);
-                    }
-                }
+                    if (changed) saveFn(latest);
+                };
+                markSeen(shownServiceKeys, AppData.loadServiceBookings, AppData.saveServiceBookings, 'service');
+                markSeen(shownOrderKeys, AppData.loadProductOrders, AppData.saveProductOrders, 'order');
             }
         });
     }
@@ -774,7 +926,6 @@ document.addEventListener('DOMContentLoaded', function() {
         }
 
         loadProfileData();
-
         profileForm.classList.add('hidden');
         profileDisplay.classList.remove('hidden');
 
@@ -790,36 +941,30 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
 
-
-    function buildPromoBannerElement(slides, slideIdx, extraClass, onSelectSlide, onBannerClick) {
-        const slide = slides[slideIdx] || slides[0];
+    /* Tiện ích bộ lọc & lưới dùng chung */
+    function buildSmoothGridPromoBanner(slides, extraClass, onBannerClick, intervalMs, initialDelayMs) {
         const banner = document.createElement('div');
         banner.className = extraClass ? `product-promo-banner ${extraClass}` : 'product-promo-banner';
-
-        banner.innerHTML = `
-            <div class="promo-slide-body">
-                <span class="promo-slide-badge">${AppUI.escapeHtml(slide.badge)}</span>
-                <div class="promo-slide-heading">${AppUI.escapeHtml(slide.heading)}</div>
-                <p class="promo-slide-sub">${AppUI.escapeHtml(slide.sub)}</p>
-                <span class="promo-slide-cta">Xem ngay &rarr;</span>
-            </div>
-            <div class="promo-dots">
-                ${slides.map((_, i) => `<button type="button" class="promo-dot${i === slideIdx ? ' active' : ''}" data-slide="${i}" aria-label="Slide ${i + 1}"></button>`).join('')}
-            </div>
-            <div class="promo-caption-bar">${AppUI.escapeHtml(slide.caption)}</div>
-        `;
-
-        banner.querySelectorAll('.promo-dot').forEach(dot => {
-            dot.addEventListener('click', function(e) {
-                e.stopPropagation();
-                onSelectSlide(parseInt(this.getAttribute('data-slide'), 10) || 0);
-            });
+        mountAutoSlider({
+            container: banner,
+            slides: slides,
+            intervalMs: intervalMs || 4800,
+            initialDelayMs: initialDelayMs || 0,
+            dotsClass: 'promo-dots',
+            dotClass: 'promo-dot',
+            renderSlide: slide => `
+                <div class="promo-slide-item">
+                    <div class="promo-slide-body">
+                        <span class="promo-slide-badge">${AppUI.escapeHtml(slide.badge)}</span>
+                        <div class="promo-slide-heading">${AppUI.escapeHtml(slide.heading)}</div>
+                        <p class="promo-slide-sub">${AppUI.escapeHtml(slide.sub)}</p>
+                        <span class="promo-slide-cta">Xem ngay &rarr;</span>
+                    </div>
+                    <div class="promo-caption-bar">${AppUI.escapeHtml(slide.caption)}</div>
+                </div>
+            `,
+            onSlideClick: onBannerClick
         });
-
-        banner.addEventListener('click', function() {
-            onBannerClick(slide);
-        });
-
         return banner;
     }
 
@@ -871,10 +1016,10 @@ document.addEventListener('DOMContentLoaded', function() {
         }
 
         if (searchEl) {
-            searchEl.addEventListener('input', function() {
-                state.search = this.value;
+            searchEl.addEventListener('input', debounce(function() {
+                state.search = searchEl.value;
                 onChange();
-            });
+            }, 120));
         }
 
         if (sortEl) {
@@ -885,9 +1030,64 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
-    /* =========================================================
-       PHẦN 2: SẢN PHẨM THIẾT YẾU CHO MẸ & BÉ + GIỎ HÀNG
-       ========================================================= */
+    function renderStorefrontGrid(cfg) {
+        const {
+            gridEl, countEl, items, countLabel, emptyMessage, emptyResetId,
+            emptyButtonLabel, onReset, renderCard, bannerEl
+        } = cfg;
+        if (!gridEl) return;
+
+        if (countEl) countEl.textContent = countLabel;
+        gridEl.innerHTML = '';
+
+        if (items.length === 0) {
+            gridEl.innerHTML = `
+                <div class="products-empty">
+                    <p style="margin-bottom: 10px;">${AppUI.escapeHtml(emptyMessage)}</p>
+                    <button type="button" id="${emptyResetId}" class="btn-primary">${AppUI.escapeHtml(emptyButtonLabel)}</button>
+                </div>
+            `;
+            const resetBtn = document.getElementById(emptyResetId);
+            if (resetBtn) resetBtn.addEventListener('click', onReset);
+            return;
+        }
+
+        const showBanner = Boolean(bannerEl) && items.length >= 2;
+        items.forEach((item, idx) => {
+            gridEl.appendChild(renderCard(item));
+            if (showBanner && idx === 1) {
+                gridEl.appendChild(bannerEl);
+            }
+        });
+    }
+
+    function resetCatalogFilterState(cfg) {
+        const { sectionEl, state, optionalKeys, searchEl, sortEl, onRender } = cfg;
+        state.category = 'all';
+        (optionalKeys || []).forEach(key => { state[key] = ''; });
+        if (state.quick) {
+            Object.keys(state.quick).forEach(q => { state.quick[q] = false; });
+        }
+        state.search = '';
+        state.sort = 'popular';
+        if (searchEl) searchEl.value = '';
+        if (sortEl) sortEl.value = 'popular';
+        syncScopedPillsUI(sectionEl, state);
+        onRender();
+    }
+
+    function syncOpenDetailModal(modalEl, attrName, catalog, openFn) {
+        if (!modalEl || modalEl.classList.contains('hidden')) return;
+        const activeId = modalEl.getAttribute(attrName);
+        if (!activeId) return;
+        if (catalog.some(item => item && item.id === activeId)) {
+            openFn(activeId);
+        } else {
+            modalEl.classList.add('hidden');
+        }
+    }
+
+    /* Sản phẩm & giỏ hàng */
     const productSection = document.getElementById('san-pham');
     const productsGrid = document.getElementById('products-grid');
     const productSearch = document.getElementById('product-search');
@@ -923,17 +1123,17 @@ document.addEventListener('DOMContentLoaded', function() {
 
     const PROMO_SLIDES = [
         {
-            badge: 'DINH DƯỠNG CHO BÉ',
-            heading: 'Sữa Bột & Sữa Pha Sẵn Chính Hãng',
-            sub: 'Đầy đủ dưỡng chất giúp bé tăng cân khỏe mạnh, phát triển chiều cao và trí não.',
-            caption: 'Ưu đãi Sữa & Dinh dưỡng thiết yếu cho bé yêu mỗi ngày',
+            badge: 'SIÊU HỘI MẸ & BÉ',
+            heading: 'Sữa Dinh Dưỡng & Tã Bỉm Chính Hãng',
+            sub: 'Giảm ngay đến 22%, tặng quà hấp dẫn kèm đơn và Freeship siêu tốc 1H tại Trà Vinh.',
+            caption: 'Ưu đãi tháng 11: Aptamil KID, GrowPLUS+, Huggies & Bobby đồng loạt giảm sốc',
             category: 'Sữa & Dinh dưỡng'
         },
         {
-            badge: 'CHĂM SÓC BÉ SƠ SINH',
-            heading: 'Tã Bỉm Mềm Mịn – Thoáng Khí Cả Ngày',
-            sub: 'Thấm hút vượt trội, bảo vệ làn da nhạy cảm của bé và giao nhanh 1H tại Trà Vinh.',
-            caption: 'Combo Tã & Bỉm siêu tiết kiệm kèm Freeship tận nhà',
+            badge: 'CHĂM SÓC BÉ YÊU',
+            heading: 'Tã Bỉm Thoáng Mát – Chống Hăm Tối Đa',
+            sub: 'Đa dạng size sơ sinh đến 3 tuổi, giao nhanh 1H để mẹ luôn sẵn tã cho bé.',
+            caption: 'Combo Tã dán & Tã quần chính hãng giá tiết kiệm đến 20%',
             category: 'Tã & Bỉm'
         },
         {
@@ -951,8 +1151,6 @@ document.addEventListener('DOMContentLoaded', function() {
             category: 'Mẹ bầu & Sau sinh'
         }
     ];
-    let currentSlideIdx = 0;
-    let promoTimer = null;
 
     function getRealSoldCounts() {
         const orders = AppData.loadProductOrders();
@@ -1024,7 +1222,7 @@ document.addEventListener('DOMContentLoaded', function() {
         productDetailBody.innerHTML = `
             <div class="product-modal-grid">
                 <div class="product-modal-img">
-                    <img src="${AppUI.escapeHtml(p.image)}" alt="${AppUI.escapeHtml(p.name)}">
+                    <img src="${AppUI.escapeHtml(p.image)}" alt="${AppUI.escapeHtml(p.name)}" decoding="async">
                 </div>
                 <div>
                     <h3 class="product-modal-title">${AppUI.escapeHtml(p.name)}</h3>
@@ -1099,7 +1297,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 ${cart.map((it, idx) => `
                     <div class="cart-item-row">
                         <div class="cart-item-info">
-                            <img src="${AppUI.escapeHtml(it.image)}" alt="${AppUI.escapeHtml(it.name)}" class="cart-item-thumb">
+                            <img src="${AppUI.escapeHtml(it.image)}" alt="${AppUI.escapeHtml(it.name)}" class="cart-item-thumb" decoding="async">
                             <div>
                                 <div class="cart-item-name">
                                     ${it.code || it.id ? `<span class="product-code-chip">Mã ${AppUI.escapeHtml(AppData.formatProductCode(it.code || it.id))}</span>` : ''}
@@ -1200,11 +1398,11 @@ document.addEventListener('DOMContentLoaded', function() {
             const latestCart = AppData.loadCart(currentUser.email);
             if (latestCart.length === 0) return;
 
+            const orders = AppData.loadProductOrders();
+            const orderCode = AppData.generateOrderCode(latestCart, orders);
             const total = latestCart.reduce((sum, it) => sum + (it.price || 0) * (it.qty || 1), 0);
-            const orderCode = 'DH' + String(Date.now()).slice(-6);
             const dateStr = new Date().toLocaleDateString();
 
-            const orders = AppData.loadProductOrders();
             orders.unshift({
                 code: orderCode,
                 date: dateStr,
@@ -1263,22 +1461,17 @@ document.addEventListener('DOMContentLoaded', function() {
         cartModal.classList.remove('hidden');
     }
 
-    function createPromoBannerElement() {
-        return buildPromoBannerElement(
-            PROMO_SLIDES,
-            currentSlideIdx,
-            '',
-            function(nextIdx) {
-                currentSlideIdx = nextIdx;
-                renderProductsGrid();
-            },
-            function(slide) {
-                filterState.category = slide.category;
-                syncScopedPillsUI(productSection, filterState);
-                renderProductsGrid();
-            }
-        );
-    }
+    const productGridBannerEl = buildSmoothGridPromoBanner(
+        PROMO_SLIDES,
+        '',
+        function(slide) {
+            filterState.category = slide.category;
+            syncScopedPillsUI(productSection, filterState);
+            renderProductsGrid();
+        },
+        4800,
+        600
+    );
 
     function createProductCardElement(product, soldCount) {
         const card = document.createElement('article');
@@ -1288,7 +1481,7 @@ document.addEventListener('DOMContentLoaded', function() {
         card.innerHTML = `
             <div>
                 <div class="product-img-wrap">
-                    <img src="${AppUI.escapeHtml(product.image)}" alt="${AppUI.escapeHtml(product.name)}">
+                    <img src="${AppUI.escapeHtml(product.image)}" alt="${AppUI.escapeHtml(product.name)}" loading="lazy" decoding="async">
                     ${product.saleTag ? `<span class="badge-sale-top">${AppUI.escapeHtml(product.saleTag)}</span>` : ''}
                     ${product.specBadge ? `<span class="badge-spec-right">${AppUI.escapeHtml(product.specBadge)}</span>` : ''}
                     ${product.freeship ? `<span class="badge-freeship-bottom">FREESHIP</span>` : ''}
@@ -1364,53 +1557,31 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     function renderProductsGrid() {
-        if (!productsGrid) return;
         const soldMap = getRealSoldCounts();
         const filtered = getFilteredProducts(soldMap);
-
-        if (productResultCount) {
-            productResultCount.textContent = `Đang hiển thị ${filtered.length} sản phẩm thiết yếu`;
-        }
-
-        productsGrid.innerHTML = '';
-        if (filtered.length === 0) {
-            productsGrid.innerHTML = `
-                <div class="products-empty">
-                    <p style="margin-bottom: 10px;">Không tìm thấy sản phẩm phù hợp với bộ lọc hiện tại.</p>
-                    <button type="button" id="btn-empty-reset-filter" class="btn-primary">Xem tất cả sản phẩm</button>
-                </div>
-            `;
-            const resetBtn = document.getElementById('btn-empty-reset-filter');
-            if (resetBtn) {
-                resetBtn.addEventListener('click', resetAllFilters);
-            }
-            return;
-        }
-
-        const showBanner = filtered.length >= 4;
-        filtered.forEach((product, idx) => {
-            productsGrid.appendChild(createProductCardElement(product, soldMap.get(product.id) || 0));
-            if (showBanner && idx === 3) {
-                productsGrid.appendChild(createPromoBannerElement());
-            }
+        renderStorefrontGrid({
+            gridEl: productsGrid,
+            countEl: productResultCount,
+            items: filtered,
+            countLabel: `Đang hiển thị ${filtered.length} sản phẩm thiết yếu`,
+            emptyMessage: 'Không tìm thấy sản phẩm phù hợp với bộ lọc hiện tại.',
+            emptyResetId: 'btn-empty-reset-filter',
+            emptyButtonLabel: 'Xem tất cả sản phẩm',
+            onReset: resetAllFilters,
+            renderCard: p => createProductCardElement(p, soldMap.get(p.id) || 0),
+            bannerEl: productGridBannerEl
         });
     }
 
     function resetAllFilters() {
-        filterState.category = 'all';
-        filterState.age = '';
-        filterState.type = '';
-        filterState.shipping = '';
-        filterState.quick.freeship = false;
-        filterState.quick.rating4 = false;
-        filterState.quick.gift = false;
-        filterState.quick.discount = false;
-        filterState.search = '';
-        filterState.sort = 'popular';
-        if (productSearch) productSearch.value = '';
-        if (productSort) productSort.value = 'popular';
-        syncScopedPillsUI(productSection, filterState);
-        renderProductsGrid();
+        resetCatalogFilterState({
+            sectionEl: productSection,
+            state: filterState,
+            optionalKeys: ['age', 'type', 'shipping'],
+            searchEl: productSearch,
+            sortEl: productSort,
+            onRender: renderProductsGrid
+        });
     }
 
     wireScopedCatalogControls({
@@ -1443,19 +1614,7 @@ document.addEventListener('DOMContentLoaded', function() {
     updateCartBadge();
     renderProductsGrid();
 
-    promoTimer = setInterval(function() {
-        currentSlideIdx = (currentSlideIdx + 1) % PROMO_SLIDES.length;
-        const banner = productsGrid ? productsGrid.querySelector('.product-promo-banner') : null;
-        if (banner) {
-            const replacement = createPromoBannerElement();
-            banner.replaceWith(replacement);
-        }
-    }, 5000);
-
-
-    /* =========================================================
-       PHẦN 3: DỊCH VỤ ĐỒNG BỘ TỪ CHỦ CƠ SỞ (TRƯNG BÀY KIỂU CỬA HÀNG)
-       ========================================================= */
+    /* Dịch vụ */
     const serviceSection = document.getElementById('dich-vu');
     const servicesListView = document.getElementById('services-list-view');
     const serviceSearch = document.getElementById('service-search');
@@ -1509,7 +1668,6 @@ document.addEventListener('DOMContentLoaded', function() {
             category: 'all'
         }
     ];
-    let currentServiceSlideIdx = 0;
 
     if (serviceDetailModal) {
         serviceDetailModal.addEventListener('click', function(e) {
@@ -1520,12 +1678,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     function getRealServiceBookedCounts() {
-        let bookings = [];
-        try {
-            bookings = JSON.parse(localStorage.getItem('myServices')) || [];
-        } catch (err) {
-            bookings = [];
-        }
+        const bookings = AppData.loadServiceBookings();
         const map = new Map();
         bookings.forEach(bk => {
             if (!bk || bk.status === 'recalled' || bk.recalledBy) return;
@@ -1550,16 +1703,11 @@ document.addEventListener('DOMContentLoaded', function() {
 
         const dateStr = new Date().toLocaleDateString();
         const profile = getSavedProfile();
-
-        let booked = [];
-        try {
-            booked = JSON.parse(localStorage.getItem('myServices')) || [];
-        } catch (err) {
-            booked = [];
-        }
+        const booked = AppData.loadServiceBookings();
+        const bookingCode = AppData.generateServiceBookingCode(data.name || data.id, booked);
 
         booked.push({
-            id: 'bk_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
+            id: bookingCode,
             serviceId: data.id,
             name: data.name,
             date: dateStr,
@@ -1572,12 +1720,10 @@ document.addEventListener('DOMContentLoaded', function() {
             customerPhone: profile.phone || ''
         });
 
-        try {
-            localStorage.setItem('myServices', JSON.stringify(booked));
-        } catch (err) {
+        if (!AppData.saveServiceBookings(booked)) {
             AppUI.error({
                 title: 'Không thể đăng ký dịch vụ',
-                message: 'Bộ nhớ trình duyệt đã đầy hoặc bị chặn. Vui lòng thử lại sau.'
+                message: 'Không thể lưu đăng ký dịch vụ vào cơ sở dữ liệu. Vui lòng thử lại sau.'
             });
             return false;
         }
@@ -1586,18 +1732,19 @@ document.addEventListener('DOMContentLoaded', function() {
         renderServicesGrid();
 
         const details = [
+            ['Mã đăng ký', bookingCode],
             ['Dịch vụ', data.name],
             ['Hình thức', data.location || 'Tại nhà'],
             ['Khách hàng', profile.fullname || currentUser.email || 'Chưa cập nhật'],
             ['Ngày đăng ký', dateStr]
         ];
         if (data.price > 0) {
-            details.splice(1, 0, ['Chi phí gói', formatCurrency(data.price)]);
+            details.splice(2, 0, ['Chi phí gói', formatCurrency(data.price)]);
         }
 
         AppUI.success({
             title: 'Đăng ký dịch vụ thành công!',
-            message: 'Dịch vụ đã được thêm vào danh sách đăng ký của bạn.',
+            message: `Mã đăng ký ${bookingCode} đã được thêm vào danh sách của bạn.`,
             details: details
         });
         return true;
@@ -1626,7 +1773,7 @@ document.addEventListener('DOMContentLoaded', function() {
         serviceDetailBody.innerHTML = `
             <div class="product-modal-grid">
                 <div class="product-modal-img">
-                    <img src="${AppUI.escapeHtml(imgSrc)}" alt="${AppUI.escapeHtml(data.name)}">
+                    <img src="${AppUI.escapeHtml(imgSrc)}" alt="${AppUI.escapeHtml(data.name)}" decoding="async">
                 </div>
                 <div>
                     <h3 class="product-modal-title">${AppUI.escapeHtml(data.name)}</h3>
@@ -1669,22 +1816,17 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    function createServicePromoBannerElement() {
-        return buildPromoBannerElement(
-            SERVICE_PROMO_SLIDES,
-            currentServiceSlideIdx,
-            'service-promo-banner',
-            function(nextIdx) {
-                currentServiceSlideIdx = nextIdx;
-                renderServicesGrid();
-            },
-            function(slide) {
-                serviceFilterState.category = slide.category;
-                syncScopedPillsUI(serviceSection, serviceFilterState);
-                renderServicesGrid();
-            }
-        );
-    }
+    const serviceGridBannerEl = buildSmoothGridPromoBanner(
+        SERVICE_PROMO_SLIDES,
+        'service-promo-banner',
+        function(slide) {
+            serviceFilterState.category = slide.category;
+            syncScopedPillsUI(serviceSection, serviceFilterState);
+            renderServicesGrid();
+        },
+        5200,
+        1400
+    );
 
     function createServiceCardElement(service, bookedCount) {
         const card = document.createElement('article');
@@ -1697,7 +1839,7 @@ document.addEventListener('DOMContentLoaded', function() {
         card.innerHTML = `
             <div>
                 <div class="product-img-wrap">
-                    <img src="${AppUI.escapeHtml(imgSrc)}" alt="${AppUI.escapeHtml(service.name)}">
+                    <img src="${AppUI.escapeHtml(imgSrc)}" alt="${AppUI.escapeHtml(service.name)}" loading="lazy" decoding="async">
                     ${service.saleTag ? `<span class="badge-sale-top">${AppUI.escapeHtml(service.saleTag)}</span>` : ''}
                     ${service.specBadge ? `<span class="badge-spec-right">${AppUI.escapeHtml(service.specBadge)}</span>` : ''}
                     ${service.location ? `<span class="badge-freeship-bottom">${AppUI.escapeHtml(service.location)}</span>` : ''}
@@ -1774,52 +1916,30 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     function resetAllServiceFilters() {
-        serviceFilterState.category = 'all';
-        serviceFilterState.target = '';
-        serviceFilterState.location = '';
-        serviceFilterState.quick.atHome = false;
-        serviceFilterState.quick.rating4 = false;
-        serviceFilterState.quick.richBenefits = false;
-        serviceFilterState.quick.discount = false;
-        serviceFilterState.search = '';
-        serviceFilterState.sort = 'popular';
-        if (serviceSearch) serviceSearch.value = '';
-        if (serviceSort) serviceSort.value = 'popular';
-        syncScopedPillsUI(serviceSection, serviceFilterState);
-        renderServicesGrid();
+        resetCatalogFilterState({
+            sectionEl: serviceSection,
+            state: serviceFilterState,
+            optionalKeys: ['target', 'location'],
+            searchEl: serviceSearch,
+            sortEl: serviceSort,
+            onRender: renderServicesGrid
+        });
     }
 
     function renderServicesGrid() {
-        if (!servicesListView) return;
         const bookedMap = getRealServiceBookedCounts();
         const filtered = getFilteredServices(bookedMap);
-
-        if (serviceResultCount) {
-            serviceResultCount.textContent = `Đang hiển thị ${filtered.length} dịch vụ chăm sóc`;
-        }
-
-        servicesListView.innerHTML = '';
-        if (filtered.length === 0) {
-            servicesListView.innerHTML = `
-                <div class="products-empty">
-                    <p style="margin-bottom: 10px;">Không tìm thấy dịch vụ phù hợp với bộ lọc hiện tại.</p>
-                    <button type="button" id="btn-empty-reset-service-filter" class="btn-primary">Xem tất cả dịch vụ</button>
-                </div>
-            `;
-            const resetBtn = document.getElementById('btn-empty-reset-service-filter');
-            if (resetBtn) {
-                resetBtn.addEventListener('click', resetAllServiceFilters);
-            }
-            return;
-        }
-
-        const showBanner = filtered.length >= 4;
-        filtered.forEach((service, idx) => {
-            const count = bookedMap.get(service.id) || bookedMap.get(service.name) || 0;
-            servicesListView.appendChild(createServiceCardElement(service, count));
-            if (showBanner && idx === 3) {
-                servicesListView.appendChild(createServicePromoBannerElement());
-            }
+        renderStorefrontGrid({
+            gridEl: servicesListView,
+            countEl: serviceResultCount,
+            items: filtered,
+            countLabel: `Đang hiển thị ${filtered.length} dịch vụ chăm sóc`,
+            emptyMessage: 'Không tìm thấy dịch vụ phù hợp với bộ lọc hiện tại.',
+            emptyResetId: 'btn-empty-reset-service-filter',
+            emptyButtonLabel: 'Xem tất cả dịch vụ',
+            onReset: resetAllServiceFilters,
+            renderCard: svc => createServiceCardElement(svc, bookedMap.get(svc.id) || bookedMap.get(svc.name) || 0),
+            bannerEl: serviceGridBannerEl
         });
     }
 
@@ -1835,41 +1955,292 @@ document.addEventListener('DOMContentLoaded', function() {
 
     renderServicesGrid();
 
-    setInterval(function() {
-        currentServiceSlideIdx = (currentServiceSlideIdx + 1) % SERVICE_PROMO_SLIDES.length;
-        const banner = servicesListView ? servicesListView.querySelector('.product-promo-banner') : null;
-        if (banner) {
-            banner.replaceWith(createServicePromoBannerElement());
+    /* Khởi tạo Banner tự động chạy đầu trang, giữa trang & Tab Ưu đãi */
+    function handleCatalogJump(targetKind, category, quickKey) {
+        if (targetKind === 'service') {
+            serviceFilterState.category = category || 'all';
+            if (quickKey) {
+                Object.keys(serviceFilterState.quick).forEach(k => {
+                    serviceFilterState.quick[k] = (k === quickKey);
+                });
+            }
+            syncScopedPillsUI(serviceSection, serviceFilterState);
+            renderServicesGrid();
+            if (serviceSection) serviceSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            return;
         }
-    }, 5000);
+        filterState.category = category || 'all';
+        if (quickKey) {
+            Object.keys(filterState.quick).forEach(k => {
+                filterState.quick[k] = (k === quickKey);
+            });
+        }
+        syncScopedPillsUI(productSection, filterState);
+        renderProductsGrid();
+        if (productSection) productSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
 
+    const HERO_MAIN_SLIDES = [
+        {
+            tag: 'SIÊU HỘI MẸ & BÉ · TRÀ VINH',
+            title: 'Chính Hãng 100% – Giao Siêu Tốc 1H',
+            desc: 'Sữa công thức, tã bỉm thấm hút và bình sữa BPA-Free đồng loạt ưu đãi đến 22%, tặng quà kèm đơn.',
+            cta: 'Mua sắm ngay',
+            bg: 'linear-gradient(135deg, #ff4d8d 0%, #fb7185 55%, #ff9ec0 100%)',
+            kind: 'product',
+            category: 'all',
+            art: `<svg viewBox="0 0 180 150" fill="none"><circle cx="90" cy="75" r="64" fill="rgba(255,255,255,0.18)"/><rect x="42" y="38" width="54" height="76" rx="10" fill="#ffffff"/><rect x="40" y="32" width="58" height="14" rx="5" fill="#ffe4ee"/><circle cx="69" cy="76" r="14" fill="#ff4d8d"/><path d="M108 58h36l-6 44h-24z" fill="#fef3c7"/><circle cx="126" cy="48" r="10" fill="#ffffff"/></svg>`
+        },
+        {
+            tag: 'CHĂM SÓC SAU SINH CHUYÊN SÂU',
+            title: 'Thông Tắc Tia Sữa Không Đau Chuẩn Y Khoa',
+            desc: 'Điều dưỡng kinh nghiệm hỗ trợ tận nhà trong 1H, ứng dụng sóng siêu âm và day ấn huyệt an toàn.',
+            cta: 'Đặt lịch ngay',
+            bg: 'linear-gradient(135deg, #db2777 0%, #ff4d8d 60%, #f472b6 100%)',
+            kind: 'service',
+            category: 'Chăm sóc Mẹ',
+            art: `<svg viewBox="0 0 180 150" fill="none"><circle cx="90" cy="75" r="64" fill="rgba(255,255,255,0.18)"/><path d="M90 28 C118 62 132 82 132 102 A42 42 0 1 1 48 102 C48 82 62 62 90 28 Z" fill="#ffffff"/><rect x="84" y="84" width="12" height="32" rx="4" fill="#ff4d8d"/><rect x="74" y="94" width="32" height="12" rx="4" fill="#ff4d8d"/></svg>`
+        },
+        {
+            tag: 'TẮM BÉ & THỦY LIỆU SƠ SINH',
+            title: 'Tắm Massage Bé Tại Nhà Chỉ Từ 280.000đ',
+            desc: 'Kiểm tra rốn, massage kích thích tiêu hóa, tắm thảo dược ấm giúp bé ngủ ngon trọn giấc.',
+            cta: 'Xem dịch vụ bé',
+            bg: 'linear-gradient(135deg, #0284c7 0%, #38bdf8 65%, #7dd3fc 100%)',
+            kind: 'service',
+            category: 'Chăm sóc Bé',
+            art: `<svg viewBox="0 0 180 150" fill="none"><circle cx="90" cy="75" r="64" fill="rgba(255,255,255,0.2)"/><path d="M40 84 C40 116 140 116 140 84 Z" fill="#ffffff"/><rect x="34" y="76" width="112" height="12" rx="6" fill="#e0f2fe"/><circle cx="72" cy="54" r="14" fill="#ffffff"/><circle cx="110" cy="46" r="10" fill="#bae6fd"/></svg>`
+        },
+        {
+            tag: 'COMBO BÌNH SỮA & ĂN DẶM',
+            title: 'Máy Hâm Sữa, Tiệt Trùng & Bột Hữu Cơ',
+            desc: 'An toàn tuyệt đối cho giai đoạn bé bắt đầu ăn dặm, bảo hành chính hãng 12 tháng.',
+            cta: 'Khám phá ngay',
+            bg: 'linear-gradient(135deg, #d97706 0%, #f59e0b 65%, #fbbf24 100%)',
+            kind: 'product',
+            category: 'Bình sữa & Ăn dặm',
+            art: `<svg viewBox="0 0 180 150" fill="none"><circle cx="90" cy="75" r="64" fill="rgba(255,255,255,0.2)"/><rect x="64" y="42" width="52" height="82" rx="14" fill="#ffffff"/><rect x="72" y="28" width="36" height="14" rx="5" fill="#fef3c7"/><rect x="74" y="80" width="32" height="30" rx="6" fill="#fde68a"/></svg>`
+        },
+        {
+            tag: 'BÁC SĨ NHI & DINH DƯỠNG 1:1',
+            title: 'Theo Dõi Tăng Trưởng & Thực Đơn Cho Bé',
+            desc: 'Thăm khám nhi khoa tại nhà, tư vấn lịch tiêm chủng và xây dựng thực đơn ăn dặm khoa học.',
+            cta: 'Tìm hiểu thêm',
+            bg: 'linear-gradient(135deg, #059669 0%, #10b981 65%, #34d399 100%)',
+            kind: 'service',
+            category: 'Y tế & Dinh dưỡng',
+            art: `<svg viewBox="0 0 180 150" fill="none"><circle cx="90" cy="75" r="64" fill="rgba(255,255,255,0.2)"/><rect x="52" y="34" width="76" height="86" rx="14" fill="#ffffff"/><rect x="84" y="54" width="12" height="44" rx="4" fill="#10b981"/><rect x="68" y="70" width="44" height="12" rx="4" fill="#10b981"/></svg>`
+        }
+    ];
+
+    mountAutoSlider({
+        container: document.getElementById('hero-main-slider'),
+        slides: HERO_MAIN_SLIDES,
+        intervalMs: 4500,
+        renderSlide: slide => `
+            <div class="hero-slide-card" style="background: ${slide.bg};">
+                <div class="hero-slide-content">
+                    <span class="hero-slide-tag">${AppUI.escapeHtml(slide.tag)}</span>
+                    <h1 class="hero-slide-title">${AppUI.escapeHtml(slide.title)}</h1>
+                    <p class="hero-slide-desc">${AppUI.escapeHtml(slide.desc)}</p>
+                    <button type="button" class="hero-slide-cta">${AppUI.escapeHtml(slide.cta)} &rarr;</button>
+                </div>
+                <div class="hero-slide-art">${slide.art}</div>
+            </div>
+        `,
+        onSlideClick: slide => handleCatalogJump(slide.kind, slide.category)
+    });
+
+    const MINI_TOP_SLIDES = [
+        { tag: 'FREESHIP 1H', title: 'Freeship Mọi Đơn Sữa & Bỉm', sub: 'Giao tận tay trong 60 phút tại Trà Vinh', bg: 'linear-gradient(135deg, #ff4d8d 0%, #f43f5e 100%)', kind: 'product', category: 'all', quick: 'freeship', icon: '🚚' },
+        { tag: 'TẶNG QUÀ XINH', title: 'Tặng 20 Túi Trữ Sữa', sub: 'Áp dụng khi mua Máy hút sữa điện đôi', bg: 'linear-gradient(135deg, #9333ea 0%, #c026d3 100%)', kind: 'product', category: 'Mẹ bầu & Sau sinh', quick: '', icon: '🎁' },
+        { tag: 'COMBO TIẾT KIỆM', title: 'Tã Bobby & Huggies -20%', sub: 'Mua combo 2 bịch tặng thêm khăn ướt', bg: 'linear-gradient(135deg, #ea580c 0%, #f59e0b 100%)', kind: 'product', category: 'Tã & Bỉm', quick: 'discount', icon: '🏷️' }
+    ];
+
+    mountAutoSlider({
+        container: document.getElementById('hero-side-slider-top'),
+        slides: MINI_TOP_SLIDES,
+        intervalMs: 4200,
+        initialDelayMs: 900,
+        renderSlide: slide => `
+            <div class="mini-slide-card" style="background: ${slide.bg};">
+                <div>
+                    <span class="mini-slide-tag">${AppUI.escapeHtml(slide.tag)}</span>
+                    <div class="mini-slide-title">${AppUI.escapeHtml(slide.title)}</div>
+                    <div class="mini-slide-sub">${AppUI.escapeHtml(slide.sub)}</div>
+                </div>
+                <span class="mini-slide-icon" aria-hidden="true">${slide.icon}</span>
+            </div>
+        `,
+        onSlideClick: slide => handleCatalogJump(slide.kind, slide.category, slide.quick)
+    });
+
+    const MINI_BOTTOM_SLIDES = [
+        { tag: 'MÃ TTTSCS_01', title: 'Thông Tắc Tia Sữa Cấp Tốc', sub: 'Sóng siêu âm không đau · Có mặt sau 1H', bg: 'linear-gradient(135deg, #0284c7 0%, #0ea5e9 100%)', kind: 'service', category: 'Chăm sóc Mẹ', quick: '', icon: '🩺' },
+        { tag: 'GIẢM -20%', title: 'Tắm & Massage Bé Sơ Sinh', sub: 'Điều dưỡng chăm sóc chuẩn y khoa tại nhà', bg: 'linear-gradient(135deg, #059669 0%, #10b981 100%)', kind: 'service', category: 'Chăm sóc Bé', quick: 'atHome', icon: '🛁' },
+        { tag: 'Y TẾ 1:1', title: 'Khám Sức Khỏe Nhi Tại Nhà', sub: 'Theo dõi biểu đồ tăng trưởng cho bé yêu', bg: 'linear-gradient(135deg, #2563eb 0%, #4f46e5 100%)', kind: 'service', category: 'Y tế & Dinh dưỡng', quick: '', icon: '📋' }
+    ];
+
+    mountAutoSlider({
+        container: document.getElementById('hero-side-slider-bottom'),
+        slides: MINI_BOTTOM_SLIDES,
+        intervalMs: 5100,
+        initialDelayMs: 1700,
+        renderSlide: slide => `
+            <div class="mini-slide-card" style="background: ${slide.bg};">
+                <div>
+                    <span class="mini-slide-tag">${AppUI.escapeHtml(slide.tag)}</span>
+                    <div class="mini-slide-title">${AppUI.escapeHtml(slide.title)}</div>
+                    <div class="mini-slide-sub">${AppUI.escapeHtml(slide.sub)}</div>
+                </div>
+                <span class="mini-slide-icon" aria-hidden="true">${slide.icon}</span>
+            </div>
+        `,
+        onSlideClick: slide => handleCatalogJump(slide.kind, slide.category, slide.quick)
+    });
+
+    const MID_DUAL_PAIRS = [
+        {
+            left: { badge: 'SỮA BỘT & SỮA PHA SẴN', title: 'Tuần Lễ Dinh Dưỡng Cho Bé 1-3 Tuổi', sub: 'Aptamil KID, GrowPLUS+ giảm đến 20% kèm quà', cta: 'Xem Sữa', bg: 'linear-gradient(135deg, #ff4d8d 0%, #fb7185 100%)', kind: 'product', category: 'Sữa & Dinh dưỡng' },
+            right: { badge: 'ĐIỀU DƯỠNG TẠI NHÀ', title: 'Phục Hồi Sức Khỏe & Xông Hơi Sau Sinh', sub: 'Xông hơi thảo mộc, massage body & thông tia sữa', cta: 'Đặt lịch', bg: 'linear-gradient(135deg, #0284c7 0%, #0ea5e9 100%)', kind: 'service', category: 'Chăm sóc Mẹ' }
+        },
+        {
+            left: { badge: 'CHĂM SÓC DA BÉ YÊU', title: 'Sữa Tắm Dịu Nhẹ & Khăn Ướt Tinh Khiết', sub: 'Cetaphil Baby, Mamamy Freeship tận nhà 1H', cta: 'Mua ngay', bg: 'linear-gradient(135deg, #059669 0%, #10b981 100%)', kind: 'product', category: 'Chăm sóc da & Tắm gội' },
+            right: { badge: 'BƠI THỦY LIỆU', title: 'Vận Động Sớm Phát Triển Chiều Cao Cho Bé', sub: 'Hồ bơi riêng vô trùng, nhiệt độ nước chuẩn 37°C', cta: 'Xem gói', bg: 'linear-gradient(135deg, #7c3aed 0%, #a855f7 100%)', kind: 'service', category: 'Chăm sóc Bé' }
+        },
+        {
+            left: { badge: 'MẸ BẦU THÔNG THÁI', title: 'Sữa Bầu Morinaga & Máy Hút Sữa Rảnh Tay', sub: 'Đầy đủ dưỡng chất thai kỳ, kích sữa nhẹ nhàng', cta: 'Chọn mua', bg: 'linear-gradient(135deg, #be185d 0%, #ec4899 100%)', kind: 'product', category: 'Mẹ bầu & Sau sinh' },
+            right: { badge: 'BẢO MẪU & DINH DƯỠNG', title: 'Tư Vấn Ăn Dặm 1:1 & Trông Trẻ Theo Ca', sub: 'Nhân sự đã kiểm tra lý lịch, hỗ trợ mẹ chu đáo', cta: 'Khám phá', bg: 'linear-gradient(135deg, #d97706 0%, #f59e0b 100%)', kind: 'service', category: 'Y tế & Dinh dưỡng' }
+        }
+    ];
+
+    const midCarouselEl = document.getElementById('mid-promo-carousel');
+    if (midCarouselEl) {
+        mountAutoSlider({
+            container: midCarouselEl,
+            slides: MID_DUAL_PAIRS,
+            intervalMs: 5600,
+            initialDelayMs: 2100,
+            renderSlide: pair => `
+                <div class="mid-dual-grid">
+                    <div class="mid-dual-card" data-side="left" style="background: ${pair.left.bg};">
+                        <div>
+                            <span class="mid-dual-badge">${AppUI.escapeHtml(pair.left.badge)}</span>
+                            <div class="mid-dual-title">${AppUI.escapeHtml(pair.left.title)}</div>
+                            <div class="mid-dual-sub">${AppUI.escapeHtml(pair.left.sub)}</div>
+                        </div>
+                        <span class="mid-dual-cta">${AppUI.escapeHtml(pair.left.cta)}</span>
+                    </div>
+                    <div class="mid-dual-card" data-side="right" style="background: ${pair.right.bg};">
+                        <div>
+                            <span class="mid-dual-badge">${AppUI.escapeHtml(pair.right.badge)}</span>
+                            <div class="mid-dual-title">${AppUI.escapeHtml(pair.right.title)}</div>
+                            <div class="mid-dual-sub">${AppUI.escapeHtml(pair.right.sub)}</div>
+                        </div>
+                        <span class="mid-dual-cta">${AppUI.escapeHtml(pair.right.cta)}</span>
+                    </div>
+                </div>
+            `
+        });
+
+        midCarouselEl.addEventListener('click', function(e) {
+            const card = e.target.closest('.mid-dual-card');
+            if (!card) return;
+            const slideIdx = Array.from(midCarouselEl.querySelectorAll('.kh-slider-slide')).indexOf(card.closest('.kh-slider-slide'));
+            const pair = MID_DUAL_PAIRS[slideIdx];
+            if (!pair) return;
+            const cfg = card.getAttribute('data-side') === 'right' ? pair.right : pair.left;
+            handleCatalogJump(cfg.kind, cfg.category);
+        });
+    }
+
+    const offersGridEl = document.getElementById('kh-offers-grid');
+    if (offersGridEl) {
+        const offers = [
+            { title: 'Freeship Siêu Tốc 1H Trà Vinh', desc: 'Áp dụng cho sản phẩm gắn nhãn Freeship giao nhanh tận nhà.', btn: 'Lọc Freeship', kind: 'product', category: 'all', quick: 'freeship' },
+            { title: 'Ưu Đãi Sữa, Tã & Dụng Cụ -22%', desc: 'Các sản phẩm giảm giá sâu và kèm quà tặng hấp dẫn cho mẹ và bé.', btn: 'Xem giảm giá', kind: 'product', category: 'all', quick: 'discount' },
+            { title: 'Dịch Vụ Điều Dưỡng Tận Nhà', desc: 'Tắm bé, massage bầu, thông tia sữa thực hiện ngay tại nhà.', btn: 'Xem dịch vụ', kind: 'service', category: 'all', quick: 'atHome' },
+            { title: 'Gói Chăm Sóc Nhiều Quyền Lợi', desc: 'Các gói từ 3 quyền lợi chuyên sâu kèm theo dõi sức khỏe miễn phí.', btn: 'Khám phá', kind: 'service', category: 'all', quick: 'richBenefits' }
+        ];
+        offersGridEl.innerHTML = offers.map((o, idx) => `
+            <div class="kh-offer-card">
+                <div>
+                    <div class="kh-offer-title">${AppUI.escapeHtml(o.title)}</div>
+                    <div class="kh-offer-desc">${AppUI.escapeHtml(o.desc)}</div>
+                </div>
+                <button type="button" class="kh-offer-btn" data-offer-idx="${idx}">${AppUI.escapeHtml(o.btn)}</button>
+            </div>
+        `).join('');
+        offersGridEl.querySelectorAll('[data-offer-idx]').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const o = offers[parseInt(this.getAttribute('data-offer-idx'), 10)];
+                if (o) handleCatalogJump(o.kind, o.category, o.quick);
+            });
+        });
+    }
+
+    /* Menu danh mục bên trái & Thanh tìm kiếm toàn trang */
+    const sidebarItems = document.querySelectorAll('#kh-sidebar-menu .kh-sidebar-item');
+    sidebarItems.forEach(btn => {
+        btn.addEventListener('click', function() {
+            sidebarItems.forEach(item => item.classList.remove('active'));
+            this.classList.add('active');
+
+            const action = this.getAttribute('data-side-action');
+            const val = this.getAttribute('data-value') || 'all';
+            if (action === 'product' || action === 'service') {
+                handleCatalogJump(action, val);
+            } else if (action === 'tab') {
+                switchHubTab(val);
+                const hubEl = document.getElementById('thong-tin');
+                if (hubEl) hubEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+        });
+    });
+
+    const headerSearchForm = document.getElementById('header-search-form');
+    const headerSearchInput = document.getElementById('header-search-input');
+
+    function applyGlobalSearch(scrollAfter) {
+        if (!headerSearchInput) return;
+        const term = headerSearchInput.value.trim();
+        filterState.search = term;
+        serviceFilterState.search = term;
+        if (productSearch) productSearch.value = term;
+        if (serviceSearch) serviceSearch.value = term;
+
+        renderProductsGrid();
+        renderServicesGrid();
+
+        if (scrollAfter && term) {
+            const matchedProds = getFilteredProducts(getRealSoldCounts()).length;
+            const matchedSvcs = getFilteredServices(getRealServiceBookedCounts()).length;
+            const targetSection = (matchedProds === 0 && matchedSvcs > 0) ? serviceSection : productSection;
+            if (targetSection) targetSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+    }
+
+    if (headerSearchInput) {
+        headerSearchInput.addEventListener('input', debounce(function() {
+            applyGlobalSearch(false);
+        }, 140));
+    }
+
+    if (headerSearchForm) {
+        headerSearchForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            applyGlobalSearch(true);
+        });
+    }
+
+    /* Đồng bộ realtime giữa các tab trình duyệt */
     window.addEventListener('storage', function(e) {
         if (e.key === AppData.SERVICES_KEY) {
             renderServicesGrid();
-            if (serviceDetailModal && !serviceDetailModal.classList.contains('hidden')) {
-                const activeServiceId = serviceDetailModal.getAttribute('data-service-id');
-                if (activeServiceId) {
-                    const services = AppData.loadServices();
-                    if (services.some(s => s.id === activeServiceId)) {
-                        openServiceDetail(activeServiceId);
-                    } else {
-                        serviceDetailModal.classList.add('hidden');
-                    }
-                }
-            }
+            syncOpenDetailModal(serviceDetailModal, 'data-service-id', AppData.loadServices(), openServiceDetail);
         } else if (e.key === AppData.PRODUCTS_KEY) {
             renderProductsGrid();
-            if (productDetailModal && !productDetailModal.classList.contains('hidden')) {
-                const activeProductId = productDetailModal.getAttribute('data-product-id');
-                if (activeProductId) {
-                    const products = AppData.loadProducts();
-                    if (products.some(p => p.id === activeProductId)) {
-                        openProductDetailModal(activeProductId);
-                    } else {
-                        productDetailModal.classList.add('hidden');
-                    }
-                }
-            }
+            syncOpenDetailModal(productDetailModal, 'data-product-id', AppData.loadProducts(), openProductDetailModal);
         } else if (e.key === 'myServices' || e.key === 'users' || e.key === AppData.PRODUCT_ORDERS_KEY) {
             loadProfileData();
             renderProductsGrid();
