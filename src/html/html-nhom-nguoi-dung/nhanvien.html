@@ -9,19 +9,50 @@
 </head>
 <body>
 
+    <!-- Thanh tiện ích đầu trang -->
+    <div id="staff-top-strip" class="staff-top-strip">
+        <div class="staff-top-inner">
+            <div class="staff-top-left">
+                <span>Hệ thống <strong>Mẹ &amp; Bé · Chi nhánh Trà Vinh</strong></span>
+                <span class="strip-sep" aria-hidden="true">|</span>
+                <span>Hotline điều phối: <strong>0326483623</strong></span>
+                <span id="staff-db-status" class="db-status-pill">● Đang đồng bộ</span>
+            </div>
+            <div class="staff-top-links">
+                <a href="#quan-ly-khach-hang" class="nav-link">Đơn &amp; Khách hàng</a>
+                <a href="#ca-truc" class="nav-link">Lịch ca trực</a>
+                <a href="#thong-tin" class="nav-link">Hồ sơ cá nhân</a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Header nhân viên -->
     <header class="header">
         <div class="header-container">
             <a href="nhanvien.html" class="logo">
-                <span class="logo-text">Hệ Thống Mẹ &amp; Bé - Nhân Viên</span>
+                <span class="logo-text">Mẹ &amp; Bé</span>
+                <span class="staff-role-badge">Nhân viên</span>
             </a>
-            
-            <nav class="nav">
-                <a href="#thong-tin" class="nav-link">Thông tin nhân viên</a>
-                <a href="#ca-truc" class="nav-link">Ca trực</a>
-                <a href="#quan-ly-khach-hang" class="nav-link">Quản lý khách hàng</a>
-            </nav>
+
+            <form id="staff-global-search-form" class="header-search-form" role="search">
+                <input type="text" id="staff-global-search" class="header-search-input" placeholder="Tìm nhanh mã đơn, tên khách hàng, SĐT hoặc dịch vụ..." autocomplete="off">
+                <button type="submit" class="header-search-btn" aria-label="Tìm kiếm">
+                    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <circle cx="11" cy="11" r="7"></circle>
+                        <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                    </svg>
+                </button>
+            </form>
 
             <div class="header-right">
+                <button type="button" id="btn-header-refresh" class="header-sync-btn" title="Đồng bộ dữ liệu từ CSDL">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <polyline points="23 4 23 10 17 10"></polyline>
+                        <polyline points="1 20 1 14 7 14"></polyline>
+                        <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+                    </svg>
+                    <span>Làm mới CSDL</span>
+                </button>
                 <a href="#thong-tin" class="header-user">
                     <span id="header-avatar"></span>
                     <span id="header-username">Nhân viên</span>
@@ -31,173 +62,314 @@
         </div>
     </header>
 
-    <main class="container">
-        <h1 class="page-title">Trang Quản Lý Nhân Viên</h1>
+    <!-- Bố cục 2 cột: Sidebar trái + Workspace phải -->
+    <div class="staff-shell">
 
-        <!-- Thông tin nhân viên -->
-        <section id="thong-tin" class="card">
-            <h2 class="card-title">Thông Tin Nhân Viên</h2>
-            <div class="card-content">
-                <div id="staff-display" class="profile-display">
-                    <div class="profile-avatar-row">
-                        <div id="staff-avatar-display"></div>
-                        <div class="profile-avatar-meta">
-                            <div id="staff-avatar-name" class="profile-avatar-name">Nhân viên</div>
-                            <div class="profile-avatar-role">Nhân viên chuyên môn</div>
-                        </div>
-                    </div>
+        <!-- Sidebar điều hướng trái -->
+        <aside class="staff-sidebar" aria-label="Menu làm việc nhân viên">
+            <div class="staff-side-section-label">Không gian làm việc</div>
+            <ul id="staff-sidebar-nav" class="staff-side-list">
+                <li>
+                    <button type="button" class="staff-side-item active" data-scroll-target="quan-ly-khach-hang">
+                        <span class="staff-side-left">
+                            <span class="staff-side-dot" style="background:#ff4d8d;"></span>
+                            <span>Đơn hàng &amp; Khách hàng</span>
+                        </span>
+                        <span id="side-pending-badge" class="staff-side-alert hidden">0</span>
+                    </button>
+                </li>
+                <li>
+                    <button type="button" class="staff-side-item" data-scroll-target="ca-truc">
+                        <span class="staff-side-left">
+                            <span class="staff-side-dot" style="background:#0284c7;"></span>
+                            <span>Lịch ca trực tuần</span>
+                        </span>
+                        <span id="side-shifts-count" class="staff-side-count">0 ca</span>
+                    </button>
+                </li>
+                <li>
+                    <button type="button" class="staff-side-item" data-scroll-target="thong-tin">
+                        <span class="staff-side-left">
+                            <span class="staff-side-dot" style="background:#64748b;"></span>
+                            <span>Hồ sơ nhân viên</span>
+                        </span>
+                        <span class="staff-side-arrow" aria-hidden="true">&rsaquo;</span>
+                    </button>
+                </li>
+            </ul>
 
-                    <div class="info-group">
-                        <span class="info-label">Họ và tên:</span>
-                        <span id="disp-staff-name" class="info-value">Chưa cập nhật</span>
-                    </div>
-                    <div class="info-group">
-                        <span class="info-label">Số điện thoại:</span>
-                        <span id="disp-staff-phone" class="info-value">Chưa cập nhật</span>
-                    </div>
-                    <div class="info-group">
-                        <span class="info-label">Chuyên môn:</span>
-                        <span id="disp-staff-role" class="info-value">Chưa cập nhật</span>
-                    </div>
-                    <div class="info-group">
-                        <span class="info-label">Khu vực:</span>
-                        <span id="disp-staff-area" class="info-value">Chưa cập nhật</span>
-                    </div>
+            <div class="staff-side-divider"></div>
+            <div class="staff-side-section-label">Lọc nhanh yêu cầu</div>
+            <ul class="staff-side-list">
+                <li>
+                    <button type="button" class="staff-side-item" data-filter-req="pending">
+                        <span class="staff-side-left">
+                            <span class="staff-side-dot" style="background:#d97706;"></span>
+                            <span>Chờ xác nhận</span>
+                        </span>
+                        <span id="side-req-pending-count" class="staff-side-count">0</span>
+                    </button>
+                </li>
+                <li>
+                    <button type="button" class="staff-side-item" data-filter-req="confirmed">
+                        <span class="staff-side-left">
+                            <span class="staff-side-dot" style="background:#10b981;"></span>
+                            <span>Đã xác nhận</span>
+                        </span>
+                        <span id="side-req-confirmed-count" class="staff-side-count">0</span>
+                    </button>
+                </li>
+                <li>
+                    <button type="button" class="staff-side-item" data-filter-req="recalled">
+                        <span class="staff-side-left">
+                            <span class="staff-side-dot" style="background:#ef4444;"></span>
+                            <span>Đã thu hồi</span>
+                        </span>
+                        <span id="side-req-recalled-count" class="staff-side-count">0</span>
+                    </button>
+                </li>
+                <li>
+                    <button type="button" class="staff-side-item" data-open-tab="profiles">
+                        <span class="staff-side-left">
+                            <span class="staff-side-dot" style="background:#8b5cf6;"></span>
+                            <span>Hồ sơ khách hàng</span>
+                        </span>
+                        <span id="side-customers-count" class="staff-side-count">0</span>
+                    </button>
+                </li>
+            </ul>
 
-                    <button type="button" id="btn-edit-staff" class="btn-primary" style="margin-top: 8px;">Thay đổi thông tin</button>
+            <div class="staff-side-quick-box">
+                <div class="staff-side-quick-title">Thao tác nhanh</div>
+                <div class="staff-side-quick-btns">
+                    <button type="button" id="btn-side-add-shift" class="staff-quick-chip">+ Đăng ký ca</button>
+                    <button type="button" id="btn-side-this-week" class="staff-quick-chip">Tuần này</button>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Vùng làm việc chính -->
+        <main class="container">
+
+            <!-- Banner tổng quan ca trực & công việc -->
+            <section class="staff-hero-card" aria-label="Tổng quan công việc nhân viên">
+                <div class="staff-hero-left">
+                    <span class="staff-hero-tag">Bảng Làm Việc Nhân Viên</span>
+                    <h1 id="hero-staff-greeting" class="staff-hero-title">Xin chào, Nhân viên!</h1>
+                    <p class="staff-hero-sub">Tiếp nhận và xác nhận đơn hàng sản phẩm, dịch vụ chăm sóc Mẹ &amp; Bé theo thời gian thực và quản lý lịch ca trực tuần.</p>
+                    <div class="staff-hero-actions">
+                        <button type="button" id="btn-hero-pending-reqs" class="btn-hero-white">Xử lý đơn chờ</button>
+                        <button type="button" id="btn-hero-add-shift" class="btn-hero-outline">+ Đăng ký ca trực</button>
+                        <button type="button" id="btn-hero-edit-profile" class="btn-hero-outline">Cập nhật hồ sơ</button>
+                    </div>
+                </div>
+                <div class="staff-hero-metrics">
+                    <div class="hero-metric-box">
+                        <span>Đơn / DV chờ xử lý</span>
+                        <strong id="hero-pending-count">0 yêu cầu</strong>
+                    </div>
+                    <div class="hero-metric-box">
+                        <span>Đã xác nhận</span>
+                        <strong id="hero-confirmed-count">0 yêu cầu</strong>
+                    </div>
+                    <div class="hero-metric-box">
+                        <span>Ca trực tuần này</span>
+                        <strong id="hero-week-shifts">0 ca (0 giờ)</strong>
+                    </div>
+                    <div class="hero-metric-box">
+                        <span>Khách hàng hệ thống</span>
+                        <strong id="hero-customers-count">0 khách</strong>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Quản lý khách hàng & xác nhận đơn hàng -->
+            <section id="quan-ly-khach-hang" class="card">
+                <div class="section-head-row">
+                    <div class="section-head-left">
+                        <h2 class="card-title section-head-title">Quản Lý Khách Hàng &amp; Xác Nhận Đơn / Dịch Vụ</h2>
+                        <span id="req-count-pill" class="section-count-pill">0 yêu cầu</span>
+                    </div>
                 </div>
 
-                <form id="staff-form" class="profile-form hidden">
-                    <div class="form-group">
-                        <label>Ảnh đại diện</label>
-                        <div class="avatar-upload">
-                            <div id="staff-avatar-preview"></div>
-                            <div class="avatar-upload-controls">
-                                <div class="avatar-upload-actions">
-                                    <input type="file" id="staff-avatar-input" accept="image/*" hidden>
-                                    <button type="button" id="btn-choose-staff-avatar" class="btn-secondary">Chọn ảnh</button>
-                                    <button type="button" id="btn-remove-staff-avatar" class="btn-secondary hidden">Xóa ảnh</button>
-                                </div>
-                                <span class="avatar-upload-hint">Hỗ trợ JPG, PNG, WebP (tối đa 5MB)</span>
+                <div class="card-content">
+                    <div id="staff-cust-kpis" class="staff-cust-kpis"></div>
+
+                    <div id="staff-cust-tabs" class="staff-cust-tabs">
+                        <button type="button" class="staff-cust-tab active" data-tab="requests">Xác nhận Đơn hàng &amp; Dịch vụ</button>
+                        <button type="button" class="staff-cust-tab" data-tab="profiles">Hồ sơ chi tiết Khách hàng</button>
+                    </div>
+
+                    <div class="staff-cust-toolbar">
+                        <input type="text" id="staff-customer-search" class="staff-cust-search" placeholder="Tìm theo tên, SĐT, email, địa chỉ, mã đơn hoặc tên dịch vụ/sản phẩm...">
+                        <select id="staff-request-type-filter" class="shift-select">
+                            <option value="all">Tất cả loại</option>
+                            <option value="service">Đăng ký dịch vụ</option>
+                            <option value="order">Đơn hàng sản phẩm</option>
+                        </select>
+                        <select id="staff-request-status-filter" class="shift-select">
+                            <option value="all">Tất cả trạng thái</option>
+                            <option value="pending">Chờ xác nhận</option>
+                            <option value="confirmed">Đã xác nhận</option>
+                            <option value="recalled">Đã thu hồi</option>
+                        </select>
+                    </div>
+
+                    <div id="customer-list-container" class="customer-list-wrap"></div>
+                </div>
+            </section>
+
+            <!-- Lịch ca trực theo thời khóa biểu -->
+            <section id="ca-truc" class="card">
+                <div class="section-head-row">
+                    <div class="section-head-left">
+                        <h2 class="card-title section-head-title">Lịch Ca Trực Theo Thời Khóa Biểu</h2>
+                        <span id="shift-count-pill" class="section-count-pill">0 ca tuần này</span>
+                    </div>
+                    <button type="button" id="btn-add-shift" class="btn-primary">+ Đăng ký ca trực</button>
+                </div>
+
+                <div class="card-content">
+                    <!-- Bộ lọc tuần -->
+                    <div class="shift-toolbar">
+                        <div class="shift-filters">
+                            <div class="shift-filter-item">
+                                <label for="filter-year">Năm:</label>
+                                <select id="filter-year" class="shift-select"></select>
+                            </div>
+                            <div class="shift-filter-item">
+                                <label for="filter-week">Tuần:</label>
+                                <select id="filter-week" class="shift-select shift-select-week"></select>
+                            </div>
+                            <div class="shift-nav-btns">
+                                <button type="button" id="btn-prev-week" class="btn-secondary btn-week-nav">&lsaquo; Tuần trước</button>
+                                <button type="button" id="btn-this-week" class="btn-secondary btn-week-nav">Tuần này</button>
+                                <button type="button" id="btn-next-week" class="btn-secondary btn-week-nav">Tuần sau &rsaquo;</button>
                             </div>
                         </div>
                     </div>
 
-                    <div class="form-group">
-                        <label for="staff-name-input">Họ và tên</label>
-                        <input type="text" id="staff-name-input" placeholder="Nhập họ và tên" required>
-                    </div>
-
-                    <div class="form-group">
-                        <label for="staff-phone-input">Số điện thoại</label>
-                        <input type="tel" id="staff-phone-input" placeholder="Nhập số điện thoại" required>
-                    </div>
-
-                    <div class="form-group">
-                        <label for="staff-role-input">Chức vụ / Chuyên môn</label>
-                        <input type="text" id="staff-role-input" placeholder="Ví dụ: Điều dưỡng viên">
-                    </div>
-
-                    <div class="form-group">
-                        <label for="staff-area-input">Khu vực phụ trách</label>
-                        <input type="text" id="staff-area-input" placeholder="Ví dụ: Đường D5, Hòa Thuận, Trà Vinh">
-                    </div>
-
-                    <div class="form-actions">
-                        <button type="submit" class="btn-primary">Lưu Lại</button>
-                        <button type="button" id="btn-cancel-staff" class="btn-secondary">Hủy</button>
-                    </div>
-                </form>
-            </div>
-        </section>
-
-        <!-- Lịch ca trực -->
-        <section id="ca-truc" class="card">
-            <h2 class="card-title">Lịch Ca Trực Theo Thời Khóa Biểu</h2>
-            <div class="card-content">
-
-                <!-- Bộ lọc tuần -->
-                <div class="shift-toolbar">
-                    <div class="shift-filters">
-                        <div class="shift-filter-item">
-                            <label for="filter-year">Năm:</label>
-                            <select id="filter-year" class="shift-select"></select>
+                    <!-- Bảng chọn ca trực -->
+                    <div id="shift-form" class="shift-picker-panel hidden">
+                        <div class="shift-picker-header">
+                            <h3 class="shift-picker-title">Đăng ký ca trực – <span id="shift-form-week-label"></span></h3>
+                            <div class="shift-legend">
+                                <span class="legend-item"><span class="legend-dot dot-available"></span> Trống</span>
+                                <span class="legend-item"><span class="legend-dot dot-selected"></span> Đang chọn</span>
+                                <span class="legend-item"><span class="legend-dot dot-mine"></span> Ca của bạn</span>
+                                <span class="legend-item"><span class="legend-dot dot-taken"></span> Đã có người nhận</span>
+                                <span class="legend-item"><span class="legend-dot dot-past"></span> Đã qua</span>
+                            </div>
                         </div>
-                        <div class="shift-filter-item">
-                            <label for="filter-week">Tuần:</label>
-                            <select id="filter-week" class="shift-select shift-select-week"></select>
+
+                        <div class="shift-picker-scroll">
+                            <table id="shift-picker" class="shift-picker-table"></table>
                         </div>
-                        <div class="shift-nav-btns">
-                            <button type="button" id="btn-prev-week" class="btn-secondary btn-week-nav">&lsaquo; Tuần trước</button>
-                            <button type="button" id="btn-this-week" class="btn-secondary btn-week-nav">Tuần này</button>
-                            <button type="button" id="btn-next-week" class="btn-secondary btn-week-nav">Tuần sau &rsaquo;</button>
+
+                        <div class="shift-picker-footer">
+                            <span id="shift-selected-count" class="shift-selected-count">Đã chọn: 0 ca</span>
+                            <div class="shift-picker-actions">
+                                <button type="button" id="btn-clear-shift-selection" class="btn-secondary">Bỏ chọn</button>
+                                <button type="button" id="btn-confirm-shifts" class="btn-primary">Xác nhận đăng ký</button>
+                                <button type="button" id="btn-cancel-shift" class="btn-secondary">Đóng</button>
+                            </div>
                         </div>
                     </div>
-                    <button type="button" id="btn-add-shift" class="btn-primary" style="font-size: 0.85rem; padding: 7px 14px;">+ Đăng ký ca trực</button>
+
+                    <div id="shift-week-summary" class="shift-week-summary"></div>
+                    <div id="weekly-timetable-container" class="table-scroll-wrap"></div>
                 </div>
+            </section>
 
-                <!-- Bảng chọn ca trực -->
-                <div id="shift-form" class="shift-picker-panel hidden">
-                    <div class="shift-picker-header">
-                        <h3 class="shift-picker-title">Đăng ký ca trực – <span id="shift-form-week-label"></span></h3>
-                        <div class="shift-legend">
-                            <span class="legend-item"><span class="legend-dot dot-available"></span> Trống</span>
-                            <span class="legend-item"><span class="legend-dot dot-selected"></span> Đang chọn</span>
-                            <span class="legend-item"><span class="legend-dot dot-mine"></span> Ca của bạn</span>
-                            <span class="legend-item"><span class="legend-dot dot-taken"></span> Đã có người nhận</span>
-                            <span class="legend-item"><span class="legend-dot dot-past"></span> Đã qua</span>
-                        </div>
-                    </div>
-
-                    <div class="shift-picker-scroll">
-                        <table id="shift-picker" class="shift-picker-table"></table>
-                    </div>
-
-                    <div class="shift-picker-footer">
-                        <span id="shift-selected-count" class="shift-selected-count">Đã chọn: 0 ca</span>
-                        <div class="shift-picker-actions">
-                            <button type="button" id="btn-clear-shift-selection" class="btn-secondary">Bỏ chọn</button>
-                            <button type="button" id="btn-confirm-shifts" class="btn-primary">Xác nhận đăng ký</button>
-                            <button type="button" id="btn-cancel-shift" class="btn-secondary">Đóng</button>
-                        </div>
+            <!-- Thông tin cá nhân nhân viên -->
+            <section id="thong-tin" class="card">
+                <div class="section-head-row">
+                    <div class="section-head-left">
+                        <h2 class="card-title section-head-title">Thông Tin Nhân Viên</h2>
                     </div>
                 </div>
 
-                <div id="shift-week-summary" class="shift-week-summary"></div>
-                <div id="weekly-timetable-container" style="overflow-x: auto;"></div>
-            </div>
-        </section>
+                <div class="card-content">
+                    <div id="staff-display" class="profile-display">
+                        <div class="profile-avatar-row">
+                            <div id="staff-avatar-display"></div>
+                            <div class="profile-avatar-meta">
+                                <div id="staff-avatar-name" class="profile-avatar-name">Nhân viên</div>
+                                <div id="staff-avatar-role" class="profile-avatar-role">Nhân viên chuyên môn</div>
+                            </div>
+                        </div>
 
-        <!-- Quản lý khách hàng & đơn hàng -->
-        <section id="quan-ly-khach-hang" class="card">
-            <h2 class="card-title">Quản Lý Khách Hàng &amp; Xác Nhận Đơn / Dịch Vụ</h2>
-            <div class="card-content">
-                <div id="staff-cust-kpis" class="staff-cust-kpis"></div>
+                        <div class="profile-info-grid">
+                            <div class="info-item">
+                                <span class="info-label">Họ và tên</span>
+                                <span id="disp-staff-name" class="info-value">Chưa cập nhật</span>
+                            </div>
+                            <div class="info-item">
+                                <span class="info-label">Số điện thoại</span>
+                                <span id="disp-staff-phone" class="info-value">Chưa cập nhật</span>
+                            </div>
+                            <div class="info-item">
+                                <span class="info-label">Chuyên môn</span>
+                                <span id="disp-staff-role" class="info-value">Chưa cập nhật</span>
+                            </div>
+                            <div class="info-item">
+                                <span class="info-label">Khu vực phụ trách</span>
+                                <span id="disp-staff-area" class="info-value">Chưa cập nhật</span>
+                            </div>
+                        </div>
 
-                <div id="staff-cust-tabs" class="staff-cust-tabs">
-                    <button type="button" class="staff-cust-tab active" data-tab="requests">Xác nhận Đơn hàng &amp; Dịch vụ</button>
-                    <button type="button" class="staff-cust-tab" data-tab="profiles">Hồ sơ chi tiết Khách hàng</button>
+                        <div>
+                            <button type="button" id="btn-edit-staff" class="btn-primary">Thay đổi thông tin</button>
+                        </div>
+                    </div>
+
+                    <form id="staff-form" class="profile-form hidden">
+                        <div class="form-group">
+                            <label>Ảnh đại diện</label>
+                            <div class="avatar-upload">
+                                <div id="staff-avatar-preview"></div>
+                                <div class="avatar-upload-controls">
+                                    <div class="avatar-upload-actions">
+                                        <input type="file" id="staff-avatar-input" accept="image/*" hidden>
+                                        <button type="button" id="btn-choose-staff-avatar" class="btn-secondary">Chọn ảnh</button>
+                                        <button type="button" id="btn-remove-staff-avatar" class="btn-secondary hidden">Xóa ảnh</button>
+                                    </div>
+                                    <span class="avatar-upload-hint">Hỗ trợ JPG, PNG, WebP (tối đa 5MB)</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="form-row-2">
+                            <div class="form-group">
+                                <label for="staff-name-input">Họ và tên</label>
+                                <input type="text" id="staff-name-input" placeholder="Nhập họ và tên" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="staff-phone-input">Số điện thoại</label>
+                                <input type="tel" id="staff-phone-input" placeholder="Nhập số điện thoại" required>
+                            </div>
+                        </div>
+
+                        <div class="form-row-2">
+                            <div class="form-group">
+                                <label for="staff-role-input">Chức vụ / Chuyên môn</label>
+                                <input type="text" id="staff-role-input" placeholder="Ví dụ: Điều dưỡng viên">
+                            </div>
+                            <div class="form-group">
+                                <label for="staff-area-input">Khu vực phụ trách</label>
+                                <input type="text" id="staff-area-input" placeholder="Ví dụ: Đường D5, Hòa Thuận, Trà Vinh">
+                            </div>
+                        </div>
+
+                        <div class="form-actions">
+                            <button type="submit" class="btn-primary">Lưu Lại</button>
+                            <button type="button" id="btn-cancel-staff" class="btn-secondary">Hủy</button>
+                        </div>
+                    </form>
                 </div>
-
-                <div class="staff-cust-toolbar">
-                    <input type="text" id="staff-customer-search" class="staff-cust-search" placeholder="Tìm theo tên, SĐT, email, địa chỉ, mã đơn hoặc tên dịch vụ/sản phẩm...">
-                    <select id="staff-request-type-filter" class="shift-select">
-                        <option value="all">Tất cả loại</option>
-                        <option value="service">Đăng ký dịch vụ</option>
-                        <option value="order">Đơn hàng sản phẩm</option>
-                    </select>
-                    <select id="staff-request-status-filter" class="shift-select">
-                        <option value="all">Tất cả trạng thái</option>
-                        <option value="pending">Chờ xác nhận</option>
-                        <option value="confirmed">Đã xác nhận</option>
-                        <option value="recalled">Đã thu hồi</option>
-                    </select>
-                </div>
-
-                <div id="customer-list-container" style="overflow-x: auto;"></div>
-            </div>
-        </section>
-    </main>
+            </section>
+        </main>
+    </div>
 
     <!-- Modal thu hồi đơn hàng / dịch vụ -->
     <div id="recall-modal" class="modal-overlay hidden">

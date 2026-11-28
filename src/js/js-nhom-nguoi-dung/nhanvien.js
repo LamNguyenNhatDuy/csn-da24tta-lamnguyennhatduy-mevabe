@@ -2,6 +2,42 @@ document.addEventListener('DOMContentLoaded', function() {
     const currentUser = AppData.requireRole('nhanvien', '../html-dangki-dangnhap/login.html');
     if (!currentUser) return;
 
+    function debounceStaff(fn, delayMs) {
+        let timer = null;
+        return function() {
+            const ctx = this;
+            const args = arguments;
+            clearTimeout(timer);
+            timer = setTimeout(function() {
+                fn.apply(ctx, args);
+            }, delayMs);
+        };
+    }
+
+    function updateBadge(id, text) {
+        const el = document.getElementById(id);
+        if (el) el.textContent = String(text);
+    }
+
+    /* Trạng thái kết nối CSDL */
+    function updateStaffDatabasePill() {
+        const pill = document.getElementById('staff-db-status');
+        if (!pill) return;
+        const connected = typeof AppData.isDatabaseConnected === 'function' && AppData.isDatabaseConnected();
+        pill.textContent = connected ? '● MySQL Real-time' : '● Chế độ trình duyệt';
+        pill.classList.toggle('is-mysql', connected);
+    }
+
+    /* Cuộn tới mục và đồng bộ active sidebar */
+    function scrollToStaffSection(sectionId) {
+        const target = sectionId ? document.getElementById(sectionId) : null;
+        if (!target) return;
+        target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        document.querySelectorAll('.staff-sidebar [data-scroll-target]').forEach(btn => {
+            btn.classList.toggle('active', btn.getAttribute('data-scroll-target') === sectionId);
+        });
+    }
+
     const btnLogout = document.getElementById('btn-logout');
     if (btnLogout) {
         btnLogout.addEventListener('click', function() {
@@ -37,6 +73,8 @@ document.addEventListener('DOMContentLoaded', function() {
     const headerUsername = document.getElementById('header-username');
     const staffAvatarDisplay = document.getElementById('staff-avatar-display');
     const staffAvatarName = document.getElementById('staff-avatar-name');
+    const staffAvatarRole = document.getElementById('staff-avatar-role');
+    const heroStaffGreeting = document.getElementById('hero-staff-greeting');
 
     const staffAvatarPreview = document.getElementById('staff-avatar-preview');
     const staffAvatarInput = document.getElementById('staff-avatar-input');
@@ -180,8 +218,15 @@ document.addEventListener('DOMContentLoaded', function() {
         if (staffAvatarName) {
             staffAvatarName.textContent = displayName;
         }
+        if (staffAvatarRole) {
+            staffAvatarRole.textContent = data.role || 'Nhân viên chuyên môn';
+        }
+        if (heroStaffGreeting) {
+            heroStaffGreeting.textContent = `Xin chào, ${displayName}!`;
+        }
     }
 
+    updateStaffDatabasePill();
     loadStaffProfile();
 
     btnEditStaff.addEventListener('click', function() {
@@ -433,6 +478,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
+    /* Bảng thời khóa biểu ca trực tuần */
     function renderTimetable() {
         const shifts = AppData.loadShifts();
         const profile = getStaffProfile();
@@ -448,49 +494,23 @@ document.addEventListener('DOMContentLoaded', function() {
         if (shiftWeekSummary) {
             shiftWeekSummary.textContent = `Tuần này bạn đã đăng ký ${myWeekShifts.length} ca (${myHours} giờ)`;
         }
-
-        timetableContainer.innerHTML = '';
-
-        const table = document.createElement('table');
-        table.style.width = '100%';
-        table.style.borderCollapse = 'collapse';
-        table.style.fontSize = '0.95rem';
+        updateBadge('hero-week-shifts', `${myWeekShifts.length} ca (${myHours} giờ)`);
+        updateBadge('side-shifts-count', `${myWeekShifts.length} ca`);
+        updateBadge('shift-count-pill', `${myWeekShifts.length} ca tuần này`);
 
         const weekLabel = getSelectedWeekText();
-
-        table.innerHTML = `
-            <thead>
-                <tr style="background-color: #f1f5f9; text-align: left;">
-                    <th style="padding: 10px; border: 1px solid var(--border-color); width: 20%;">Thứ</th>
-                    <th style="padding: 10px; border: 1px solid var(--border-color); width: 35%;">Ca Trực (${AppUI.escapeHtml(weekLabel)})</th>
-                    <th style="padding: 10px; border: 1px solid var(--border-color); width: 15%;">Nhân viên</th>
-                    <th style="padding: 10px; border: 1px solid var(--border-color); width: 15%;">Trạng thái</th>
-                    <th style="padding: 10px; border: 1px solid var(--border-color); width: 15%; text-align: center;">Hành động</th>
-                </tr>
-            </thead>
-            <tbody id="timetable-rows"></tbody>
-        `;
-
-        timetableContainer.appendChild(table);
-        const tbody = document.getElementById('timetable-rows');
-
         const shiftOrder = { sang: 1, chieu: 2, toi: 3 };
 
-        AppData.DAY_NAMES.forEach((day, offset) => {
+        const rowsHtml = AppData.DAY_NAMES.map((day, offset) => {
             const dayDateObj = weekMonday ? AppData.addDays(weekMonday, offset) : null;
             const dayDateISO = dayDateObj ? AppData.toISODate(dayDateObj) : '';
             const dayDateLabel = dayDateObj ? AppData.formatDate(dayDateObj) : '';
-            const isToday = dayDateISO && dayDateISO === todayISO;
+            const isToday = Boolean(dayDateISO && dayDateISO === todayISO);
 
             const dayShifts = weekShifts
                 .filter(item => item.date === dayDateISO || item.day === day)
                 .slice()
                 .sort((a, b) => (shiftOrder[a.shiftKey] || 9) - (shiftOrder[b.shiftKey] || 9));
-
-            const tr = document.createElement('tr');
-            if (isToday) {
-                tr.style.backgroundColor = '#fff1f6';
-            }
 
             let timeContent = '<span style="color: var(--text-muted); font-style: italic;">Trống (Nghỉ)</span>';
             let staffContent = '-';
@@ -499,80 +519,95 @@ document.addEventListener('DOMContentLoaded', function() {
 
             if (dayShifts.length > 0) {
                 timeContent = dayShifts.map(s => `<div style="padding: 3px 0; font-weight: 500;">• ${AppUI.escapeHtml(s.time)}</div>`).join('');
-                staffContent = dayShifts.map(s => `<div style="padding: 3px 0; font-weight: 600; color: #3b82f6;">${AppUI.escapeHtml(s.staff || 'Chưa rõ')}</div>`).join('');
+                staffContent = dayShifts.map(s => `<div style="padding: 3px 0; font-weight: 600; color: #0284c7;">${AppUI.escapeHtml(s.staff || 'Chưa rõ')}</div>`).join('');
 
                 statusContent = dayShifts.map(s => {
                     const statusText = AppData.getShiftStatus(s, now);
-                    let color = '#d97706';
-                    if (statusText === 'Đã hoàn thành') color = '#10b981';
-                    else if (statusText === 'Đang trực') color = 'var(--primary)';
-                    return `<div style="padding: 3px 0; color: ${color}; font-weight: 600;">${statusText}</div>`;
+                    const pillCls = statusText === 'Đã hoàn thành'
+                        ? 'is-done'
+                        : (statusText === 'Đang trực' ? 'is-active' : 'is-upcoming');
+                    return `<div><span class="shift-status-pill ${pillCls}">${statusText}</span></div>`;
                 }).join('');
 
                 actionContent = dayShifts.map(s => {
                     const statusText = AppData.getShiftStatus(s, now);
-                    const canCancel = isMyShift(s, profile) && statusText === 'Sắp tới';
-                    if (canCancel) {
-                        return `<button type="button" class="btn-delete-shift" data-id="${AppUI.escapeHtml(s.id)}" style="padding: 3px 8px; background-color: #ef4444; color: #fff; border: none; border-radius: 4px; font-size: 0.8rem; cursor: pointer; display: block; margin: 3px auto;">Hủy</button>`;
+                    if (isMyShift(s, profile) && statusText === 'Sắp tới') {
+                        return `<button type="button" class="btn-delete-shift" data-id="${AppUI.escapeHtml(s.id)}">Hủy</button>`;
                     }
                     return '<div style="padding: 3px 0; color: var(--text-muted);">-</div>';
                 }).join('');
             }
 
-            const dayBg = isToday ? '#fff1f6' : '#fafafa';
-            tr.innerHTML = `
-                <td style="padding: 10px; border: 1px solid var(--border-color); font-weight: 600; background-color: ${dayBg};">
-                    <div>${day}${isToday ? ' <span style="font-size:0.75rem;color:var(--primary);">(Hôm nay)</span>' : ''}</div>
-                    <div style="font-size: 0.8rem; font-weight: 400; color: var(--text-muted);">${dayDateLabel}</div>
-                </td>
-                <td style="padding: 10px; border: 1px solid var(--border-color);">${timeContent}</td>
-                <td style="padding: 10px; border: 1px solid var(--border-color);">${staffContent}</td>
-                <td style="padding: 10px; border: 1px solid var(--border-color);">${statusContent}</td>
-                <td style="padding: 10px; border: 1px solid var(--border-color); text-align: center;">${actionContent}</td>
+            return `
+                <tr class="${isToday ? 'row-today' : ''}">
+                    <td style="font-weight: 600;">
+                        <div>${day}${isToday ? ' <span style="font-size:0.75rem;color:var(--primary);">(Hôm nay)</span>' : ''}</div>
+                        <div style="font-size: 0.78rem; font-weight: 400; color: var(--text-muted);">${dayDateLabel}</div>
+                    </td>
+                    <td>${timeContent}</td>
+                    <td>${staffContent}</td>
+                    <td>${statusContent}</td>
+                    <td style="text-align: center;">${actionContent}</td>
+                </tr>
             `;
-            tbody.appendChild(tr);
-        });
+        }).join('');
 
-        document.querySelectorAll('.btn-delete-shift').forEach(btn => {
-            btn.addEventListener('click', function() {
-                const shiftId = this.getAttribute('data-id');
-                const currentShifts = AppData.loadShifts();
-                const targetIndex = currentShifts.findIndex(item => item.id === shiftId);
-                if (targetIndex === -1) return;
+        timetableContainer.innerHTML = `
+            <table class="staff-data-table">
+                <thead>
+                    <tr>
+                        <th style="width: 20%;">Thứ</th>
+                        <th style="width: 35%;">Ca Trực (${AppUI.escapeHtml(weekLabel)})</th>
+                        <th style="width: 15%;">Nhân viên</th>
+                        <th style="width: 15%;">Trạng thái</th>
+                        <th style="width: 15%; text-align: center;">Hành động</th>
+                    </tr>
+                </thead>
+                <tbody>${rowsHtml}</tbody>
+            </table>
+        `;
+    }
 
-                const target = currentShifts[targetIndex];
-                AppUI.confirm({
-                    title: 'Xác nhận hủy ca trực',
-                    message: `Bạn có chắc chắn muốn hủy ${target.time} vào ${target.day} (${AppData.formatDate(target.date)}) không?`,
-                    danger: true,
-                    confirmText: 'Hủy ca',
-                    cancelText: 'Giữ lại',
-                    onConfirm: function() {
-                        const latest = AppData.loadShifts();
-                        const idx = latest.findIndex(item => item.id === shiftId);
-                        if (idx === -1) return;
-                        latest.splice(idx, 1);
-                        if (!AppData.saveShifts(latest)) {
-                            AppUI.error({
-                                title: 'Lỗi lưu dữ liệu',
-                                message: 'Không thể cập nhật lịch trực.'
-                            });
-                            return;
-                        }
-                        renderTimetable();
-                        if (!shiftForm.classList.contains('hidden')) {
-                            renderShiftPicker();
-                        }
-                        AppUI.success({
-                            title: 'Đã hủy ca trực',
-                            message: 'Ca trực đã được xóa khỏi thời khóa biểu.',
-                            details: [
-                                ['Ngày trực', `${target.day}, ${AppData.formatDate(target.date)}`],
-                                ['Khung giờ', target.time]
-                            ]
+    if (timetableContainer) {
+        timetableContainer.addEventListener('click', function(e) {
+            const btn = e.target.closest('.btn-delete-shift');
+            if (!btn) return;
+            const shiftId = btn.getAttribute('data-id');
+            const currentShifts = AppData.loadShifts();
+            const target = currentShifts.find(item => item.id === shiftId);
+            if (!target) return;
+
+            AppUI.confirm({
+                title: 'Xác nhận hủy ca trực',
+                message: `Bạn có chắc chắn muốn hủy ${target.time} vào ${target.day} (${AppData.formatDate(target.date)}) không?`,
+                danger: true,
+                confirmText: 'Hủy ca',
+                cancelText: 'Giữ lại',
+                onConfirm: function() {
+                    const latest = AppData.loadShifts();
+                    const idx = latest.findIndex(item => item.id === shiftId);
+                    if (idx === -1) return;
+                    latest.splice(idx, 1);
+                    if (!AppData.saveShifts(latest)) {
+                        AppUI.error({
+                            title: 'Lỗi lưu dữ liệu',
+                            message: 'Không thể cập nhật lịch trực.'
                         });
+                        return;
                     }
-                });
+                    renderTimetable();
+                    if (!shiftForm.classList.contains('hidden')) {
+                        renderShiftPicker();
+                    }
+                    AppUI.success({
+                        title: 'Đã hủy ca trực',
+                        message: 'Ca trực đã được xóa khỏi thời khóa biểu.',
+                        details: [
+                            ['Ngày trực', `${target.day}, ${AppData.formatDate(target.date)}`],
+                            ['Khung giờ', target.time]
+                        ]
+                    });
+                }
             });
         });
     }
@@ -583,6 +618,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
+    /* Bảng chọn đăng ký đa ca trực */
     function renderShiftPicker() {
         const shifts = AppData.loadShifts();
         const profile = getStaffProfile();
@@ -595,111 +631,98 @@ document.addEventListener('DOMContentLoaded', function() {
             shiftFormWeekLabel.textContent = getSelectedWeekText();
         }
 
-        shiftPickerTable.innerHTML = '';
-
-        const thead = document.createElement('thead');
-        const headTr = document.createElement('tr');
-
-        const thCorner = document.createElement('th');
-        thCorner.textContent = 'Buổi / Thứ';
-        headTr.appendChild(thCorner);
-
-        const weekDates = [];
-        AppData.DAY_NAMES.forEach((dayName, offset) => {
+        const weekDates = AppData.DAY_NAMES.map((dayName, offset) => {
             const dObj = weekMonday ? AppData.addDays(weekMonday, offset) : null;
             const dISO = dObj ? AppData.toISODate(dObj) : '';
-            weekDates.push({ dayName: dayName, dateObj: dObj, dateISO: dISO });
-
-            const th = document.createElement('th');
-            if (dISO === todayISO) th.className = 'col-today';
-            const daySpan = document.createElement('div');
-            daySpan.textContent = dayName;
-            const dateSpan = document.createElement('div');
-            dateSpan.style.fontSize = '0.78rem';
-            dateSpan.style.fontWeight = '400';
-            dateSpan.textContent = dObj ? `${pad2(dObj.getDate())}/${pad2(dObj.getMonth() + 1)}` : '';
-            th.appendChild(daySpan);
-            th.appendChild(dateSpan);
-            headTr.appendChild(th);
+            const shortDate = dObj ? `${pad2(dObj.getDate())}/${pad2(dObj.getMonth() + 1)}` : '';
+            return { dayName, dateISO: dISO, shortDate };
         });
-        thead.appendChild(headTr);
-        shiftPickerTable.appendChild(thead);
 
-        const tbody = document.createElement('tbody');
-        AppData.SHIFT_TYPES.forEach(shiftType => {
-            const tr = document.createElement('tr');
+        const headColsHtml = weekDates.map(d => `
+            <th class="${d.dateISO === todayISO ? 'col-today' : ''}">
+                <div>${d.dayName}</div>
+                <div style="font-size: 0.78rem; font-weight: 400;">${d.shortDate}</div>
+            </th>
+        `).join('');
 
-            const labelTd = document.createElement('td');
-            labelTd.className = 'shift-picker-row-label';
-            const titleDiv = document.createElement('div');
-            titleDiv.textContent = shiftType.label;
-            const timeSpan = document.createElement('span');
-            timeSpan.className = 'shift-picker-row-time';
-            timeSpan.textContent = `${shiftType.start} - ${shiftType.end}`;
-            labelTd.appendChild(titleDiv);
-            labelTd.appendChild(timeSpan);
-            tr.appendChild(labelTd);
-
-            weekDates.forEach(dayInfo => {
-                const td = document.createElement('td');
+        const bodyRowsHtml = AppData.SHIFT_TYPES.map(shiftType => {
+            const cellsHtml = weekDates.map(dayInfo => {
                 const slotKey = `${dayInfo.dateISO}|${shiftType.key}`;
-                const btn = document.createElement('button');
-                btn.type = 'button';
-                btn.className = 'shift-slot';
-                btn.setAttribute('data-date', dayInfo.dateISO);
-                btn.setAttribute('data-shift', shiftType.key);
-
                 const existing = shifts.find(s => s.date === dayInfo.dateISO && s.shiftKey === shiftType.key);
                 const started = AppData.isShiftStarted(dayInfo.dateISO, shiftType.key, now);
 
+                let cls = 'shift-slot ';
+                let label = '';
+                let disabledAttr = '';
+
                 if (existing) {
-                    if (isMyShift(existing, profile)) {
-                        btn.classList.add('slot-mine');
-                        btn.textContent = 'Ca của bạn';
-                    } else {
-                        btn.classList.add('slot-taken');
-                        btn.textContent = `Đã có: ${existing.staff || 'Nhân viên'}`;
-                    }
-                    btn.disabled = true;
+                    cls += isMyShift(existing, profile) ? 'slot-mine' : 'slot-taken';
+                    label = isMyShift(existing, profile) ? 'Ca của bạn' : `Đã có: ${existing.staff || 'Nhân viên'}`;
+                    disabledAttr = 'disabled';
                     selectedSlots.delete(slotKey);
                 } else if (started) {
-                    btn.classList.add('slot-past');
-                    btn.textContent = 'Đã qua';
-                    btn.disabled = true;
+                    cls += 'slot-past';
+                    label = 'Đã qua';
+                    disabledAttr = 'disabled';
                     selectedSlots.delete(slotKey);
                 } else {
                     const isSelected = selectedSlots.has(slotKey);
-                    btn.classList.add(isSelected ? 'slot-selected' : 'slot-available');
-                    btn.textContent = isSelected ? '✓ Đã chọn' : '+ Chọn';
-
-                    btn.addEventListener('click', function() {
-                        if (selectedSlots.has(slotKey)) {
-                            selectedSlots.delete(slotKey);
-                            btn.classList.remove('slot-selected');
-                            btn.classList.add('slot-available');
-                            btn.textContent = '+ Chọn';
-                        } else {
-                            selectedSlots.set(slotKey, {
-                                dateISO: dayInfo.dateISO,
-                                shiftKey: shiftType.key
-                            });
-                            btn.classList.remove('slot-available');
-                            btn.classList.add('slot-selected');
-                            btn.textContent = '✓ Đã chọn';
-                        }
-                        updateSelectedCountLabel();
-                    });
+                    cls += isSelected ? 'slot-selected' : 'slot-available';
+                    label = isSelected ? '✓ Đã chọn' : '+ Chọn';
                 }
 
-                td.appendChild(btn);
-                tr.appendChild(td);
-            });
+                return `
+                    <td>
+                        <button type="button" class="${cls}" data-date="${AppUI.escapeHtml(dayInfo.dateISO)}" data-shift="${AppUI.escapeHtml(shiftType.key)}" ${disabledAttr}>${AppUI.escapeHtml(label)}</button>
+                    </td>
+                `;
+            }).join('');
 
-            tbody.appendChild(tr);
-        });
+            return `
+                <tr>
+                    <td class="shift-picker-row-label">
+                        <div>${AppUI.escapeHtml(shiftType.label)}</div>
+                        <span class="shift-picker-row-time">${AppUI.escapeHtml(shiftType.start)} - ${AppUI.escapeHtml(shiftType.end)}</span>
+                    </td>
+                    ${cellsHtml}
+                </tr>
+            `;
+        }).join('');
 
-        shiftPickerTable.appendChild(tbody);
+        shiftPickerTable.innerHTML = `
+            <thead>
+                <tr>
+                    <th>Buổi / Thứ</th>
+                    ${headColsHtml}
+                </tr>
+            </thead>
+            <tbody>${bodyRowsHtml}</tbody>
+        `;
         updateSelectedCountLabel();
+    }
+
+    if (shiftPickerTable) {
+        shiftPickerTable.addEventListener('click', function(e) {
+            const btn = e.target.closest('.shift-slot');
+            if (!btn || btn.disabled) return;
+            const dateISO = btn.getAttribute('data-date') || '';
+            const shiftKey = btn.getAttribute('data-shift') || '';
+            if (!dateISO || !shiftKey) return;
+
+            const slotKey = `${dateISO}|${shiftKey}`;
+            if (selectedSlots.has(slotKey)) {
+                selectedSlots.delete(slotKey);
+                btn.classList.remove('slot-selected');
+                btn.classList.add('slot-available');
+                btn.textContent = '+ Chọn';
+            } else {
+                selectedSlots.set(slotKey, { dateISO: dateISO, shiftKey: shiftKey });
+                btn.classList.remove('slot-available');
+                btn.classList.add('slot-selected');
+                btn.textContent = '✓ Đã chọn';
+            }
+            updateSelectedCountLabel();
+        });
     }
 
     populateYearFilter();
@@ -1299,6 +1322,20 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
+    let currentRenderedRequests = [];
+    let currentFilteredCustomers = [];
+
+    /* Kích hoạt tab quản lý khách hàng */
+    function setActiveCustomerTab(tabName) {
+        activeStaffCustTab = tabName || 'requests';
+        if (staffCustTabs) {
+            staffCustTabs.querySelectorAll('.staff-cust-tab').forEach(b => {
+                b.classList.toggle('active', b.getAttribute('data-tab') === activeStaffCustTab);
+            });
+        }
+    }
+
+    /* Render KPI, danh sách yêu cầu và hồ sơ khách hàng theo batch */
     function renderCustomerList() {
         const snapshot = loadCustomerManagementSnapshot();
         const pendingCount = snapshot.requests.filter(r => !r.isConfirmed && !r.isRecalled).length;
@@ -1308,29 +1345,37 @@ document.addEventListener('DOMContentLoaded', function() {
             .filter(r => r.kind === 'order' && !r.isRecalled)
             .reduce((s, r) => s + r.price, 0);
 
+        updateBadge('hero-pending-count', `${pendingCount} yêu cầu`);
+        updateBadge('hero-confirmed-count', `${confirmedCount} yêu cầu`);
+        updateBadge('hero-customers-count', `${snapshot.customers.length} khách`);
+        updateBadge('side-req-pending-count', pendingCount);
+        updateBadge('side-req-confirmed-count', confirmedCount);
+        updateBadge('side-req-recalled-count', recalledCount);
+        updateBadge('side-customers-count', snapshot.customers.length);
+
+        const pendingBadge = document.getElementById('side-pending-badge');
+        if (pendingBadge) {
+            pendingBadge.textContent = String(pendingCount);
+            pendingBadge.classList.toggle('hidden', pendingCount <= 0);
+        }
+
         if (staffCustKpis) {
-            staffCustKpis.innerHTML = `
+            const kpiItems = [
+                ['Khách hàng', snapshot.customers.length, '#ff4d8d', 'var(--text-main)'],
+                ['Chờ xác nhận', pendingCount, '#d97706', '#d97706'],
+                ['Đã xác nhận', confirmedCount, '#10b981', '#059669'],
+                ['Đã thu hồi', recalledCount, '#ef4444', '#dc2626'],
+                ['Giá trị đơn SP', formatVnd(ordersRevenue), '#0284c7', 'var(--primary)']
+            ];
+            staffCustKpis.innerHTML = kpiItems.map(([label, val, dotColor, valColor]) => `
                 <div class="staff-cust-kpi">
-                    <div class="staff-cust-kpi-label">Khách hàng</div>
-                    <div class="staff-cust-kpi-val">${snapshot.customers.length}</div>
+                    <div class="kpi-top">
+                        <div class="staff-cust-kpi-label">${label}</div>
+                        <span class="kpi-dot" style="background: ${dotColor};"></span>
+                    </div>
+                    <div class="staff-cust-kpi-val" style="color: ${valColor};">${val}</div>
                 </div>
-                <div class="staff-cust-kpi">
-                    <div class="staff-cust-kpi-label">Chờ xác nhận</div>
-                    <div class="staff-cust-kpi-val" style="color: #d97706;">${pendingCount}</div>
-                </div>
-                <div class="staff-cust-kpi">
-                    <div class="staff-cust-kpi-label">Đã xác nhận</div>
-                    <div class="staff-cust-kpi-val" style="color: #059669;">${confirmedCount}</div>
-                </div>
-                <div class="staff-cust-kpi">
-                    <div class="staff-cust-kpi-label">Đã thu hồi</div>
-                    <div class="staff-cust-kpi-val" style="color: #dc2626;">${recalledCount}</div>
-                </div>
-                <div class="staff-cust-kpi">
-                    <div class="staff-cust-kpi-label">Giá trị đơn SP</div>
-                    <div class="staff-cust-kpi-val" style="color: var(--primary);">${formatVnd(ordersRevenue)}</div>
-                </div>
-            `;
+            `).join('');
         }
 
         if (staffRequestTypeFilter) {
@@ -1361,19 +1406,17 @@ document.addEventListener('DOMContentLoaded', function() {
                 return true;
             });
 
+            currentRenderedRequests = filteredReqs;
+            const isReqFiltered = Boolean(query || typeVal !== 'all' || statusVal !== 'all');
+            updateBadge('req-count-pill', isReqFiltered ? `${filteredReqs.length}/${snapshot.requests.length} yêu cầu` : `${snapshot.requests.length} yêu cầu`);
+
             if (filteredReqs.length === 0) {
                 customerListContainer.innerHTML = `<p style="color: var(--text-muted); font-style: italic; padding: 12px 0;">${snapshot.requests.length === 0 ? 'Hiện chưa có đơn hàng hoặc đăng ký dịch vụ nào từ khách hàng.' : 'Không có bản ghi nào khớp với bộ lọc hiện tại.'}</p>`;
                 return;
             }
 
-            const listEl = document.createElement('div');
-            listEl.className = 'staff-req-list';
-
-            filteredReqs.forEach(req => {
-                const card = document.createElement('div');
+            customerListContainer.innerHTML = `<div class="staff-req-list">${filteredReqs.map((req, idx) => {
                 const cardStateClass = req.isRecalled ? ' is-recalled' : (req.isConfirmed ? ' is-confirmed' : '');
-                card.className = `staff-req-card${cardStateClass}`;
-
                 const kindLabel = req.kind === 'service' ? 'Đăng ký dịch vụ' : 'Đơn hàng sản phẩm';
                 const kindClass = req.kind === 'service' ? 'kind-service' : 'kind-order';
                 const statusBadge = req.isRecalled
@@ -1415,71 +1458,49 @@ document.addEventListener('DOMContentLoaded', function() {
                 } else if (req.isConfirmed) {
                     rightActionHtml = `
                         <span class="staff-confirmed-tag">✓ Đã xác nhận bởi: ${AppUI.escapeHtml(req.confirmedBy)}${confirmedAtText ? ` (${AppUI.escapeHtml(confirmedAtText)})` : ''}</span>
-                        <button type="button" class="btn-recall-req">Thu hồi</button>
+                        <button type="button" class="btn-recall-req" data-req-idx="${idx}">Thu hồi</button>
                     `;
                 } else {
-                    rightActionHtml = `<button type="button" class="btn-confirm-req">${req.kind === 'service' ? 'Xác nhận dịch vụ' : 'Xác nhận đơn hàng'}</button>`;
+                    rightActionHtml = `<button type="button" class="btn-confirm-req" data-req-idx="${idx}">${req.kind === 'service' ? 'Xác nhận dịch vụ' : 'Xác nhận đơn hàng'}</button>`;
                 }
 
                 const priceText = req.kind === 'service'
                     ? (req.price > 0 ? `Giá gói: ${formatVnd(req.price)}` : 'Liên hệ tư vấn')
                     : `Tổng tiền: ${formatVnd(req.price)}`;
 
-                card.innerHTML = `
-                    <div class="staff-req-top">
-                        <div class="staff-req-badges">
-                            <span class="staff-req-kind ${kindClass}">${kindLabel}</span>
-                            <span class="staff-req-code">${AppUI.escapeHtml(req.code)}</span>
-                            <span class="staff-req-time">· ${AppUI.escapeHtml(req.dateLabel)}</span>
-                        </div>
-                        ${statusBadge}
-                    </div>
-                    ${recallNoteBlock}
-                    <div class="staff-req-body">
-                        <div class="staff-req-customer-box">
-                            ${AppUI.avatarHtml(req.customerAvatar, req.customerName, 38)}
-                            <div class="staff-req-customer-meta">
-                                <div class="staff-req-customer-name">${AppUI.escapeHtml(req.customerName)}</div>
-                                <div><strong>SĐT:</strong> ${AppUI.escapeHtml(req.customerPhone)}</div>
-                                <div><strong>Tài khoản:</strong> ${AppUI.escapeHtml(req.customerEmail || 'Khách hàng')}</div>
-                                <div><strong>Địa chỉ:</strong> ${AppUI.escapeHtml(req.customerAddress)}</div>
+                return `
+                    <div class="staff-req-card${cardStateClass}">
+                        <div class="staff-req-top">
+                            <div class="staff-req-badges">
+                                <span class="staff-req-kind ${kindClass}">${kindLabel}</span>
+                                <span class="staff-req-code">${AppUI.escapeHtml(req.code)}</span>
+                                <span class="staff-req-time">· ${AppUI.escapeHtml(req.dateLabel)}</span>
                             </div>
+                            ${statusBadge}
                         </div>
-                        ${contentHtml}
-                    </div>
-                    <div class="staff-req-footer">
-                        <span class="staff-req-amount">${priceText}</span>
-                        <div class="staff-req-actions">
-                            <button type="button" class="btn-secondary btn-view-req" style="padding: 6px 12px; font-size: 0.84rem;">Xem chi tiết</button>
-                            ${rightActionHtml}
+                        ${recallNoteBlock}
+                        <div class="staff-req-body">
+                            <div class="staff-req-customer-box">
+                                ${AppUI.avatarHtml(req.customerAvatar, req.customerName, 38)}
+                                <div class="staff-req-customer-meta">
+                                    <div class="staff-req-customer-name">${AppUI.escapeHtml(req.customerName)}</div>
+                                    <div><strong>SĐT:</strong> ${AppUI.escapeHtml(req.customerPhone)}</div>
+                                    <div><strong>Tài khoản:</strong> ${AppUI.escapeHtml(req.customerEmail || 'Khách hàng')}</div>
+                                    <div><strong>Địa chỉ:</strong> ${AppUI.escapeHtml(req.customerAddress)}</div>
+                                </div>
+                            </div>
+                            ${contentHtml}
+                        </div>
+                        <div class="staff-req-footer">
+                            <span class="staff-req-amount">${priceText}</span>
+                            <div class="staff-req-actions">
+                                <button type="button" class="btn-secondary btn-view-req" data-req-idx="${idx}" style="padding: 6px 12px; font-size: 0.84rem;">Xem chi tiết</button>
+                                ${rightActionHtml}
+                            </div>
                         </div>
                     </div>
                 `;
-
-                const btnView = card.querySelector('.btn-view-req');
-                const btnConfirm = card.querySelector('.btn-confirm-req');
-                const btnRecall = card.querySelector('.btn-recall-req');
-                if (btnView) {
-                    btnView.addEventListener('click', function() {
-                        openRequestDetail(req);
-                    });
-                }
-                if (btnConfirm) {
-                    btnConfirm.addEventListener('click', function() {
-                        confirmCustomerRequest(req.kind, req.realIdx);
-                    });
-                }
-                if (btnRecall) {
-                    btnRecall.addEventListener('click', function() {
-                        openRecallModal(req);
-                    });
-                }
-
-                listEl.appendChild(card);
-            });
-
-            customerListContainer.innerHTML = '';
-            customerListContainer.appendChild(listEl);
+            }).join('')}</div>`;
             return;
         }
 
@@ -1491,95 +1512,216 @@ document.addEventListener('DOMContentLoaded', function() {
             return hay.indexOf(query) !== -1;
         });
 
+        currentFilteredCustomers = filteredCustomers;
+        updateBadge('req-count-pill', query ? `${filteredCustomers.length}/${snapshot.customers.length} khách hàng` : `${snapshot.customers.length} khách hàng`);
+
         if (filteredCustomers.length === 0) {
             customerListContainer.innerHTML = `<p style="color: var(--text-muted); font-style: italic; padding: 12px 0;">${snapshot.customers.length === 0 ? 'Chưa có dữ liệu khách hàng trong hệ thống.' : 'Không tìm thấy khách hàng phù hợp.'}</p>`;
             return;
         }
 
-        const table = document.createElement('table');
-        table.style.width = '100%';
-        table.style.borderCollapse = 'collapse';
-        table.style.fontSize = '0.92rem';
-
-        table.innerHTML = `
-            <thead>
-                <tr style="background-color: #f1f5f9; text-align: left;">
-                    <th style="padding: 10px; border: 1px solid var(--border-color);">Khách hàng</th>
-                    <th style="padding: 10px; border: 1px solid var(--border-color);">Liên hệ &amp; Địa chỉ</th>
-                    <th style="padding: 10px; border: 1px solid var(--border-color);">Dịch vụ đã đặt</th>
-                    <th style="padding: 10px; border: 1px solid var(--border-color);">Đơn hàng SP</th>
-                    <th style="padding: 10px; border: 1px solid var(--border-color); text-align: center;">Thao tác</th>
-                </tr>
-            </thead>
-            <tbody>
-                ${filteredCustomers.map((cust, idx) => {
-                    const svcConfirmed = cust.services.filter(s => getRequestStatusFlags(s).isConfirmed).length;
-                    const ordConfirmed = cust.orders.filter(o => getRequestStatusFlags(o).isConfirmed).length;
-                    const ordTotal = cust.orders.filter(o => !getRequestStatusFlags(o).isRecalled).reduce((sum, o) => sum + (Number(o.totalAmount) || 0), 0);
-                    return `
+        customerListContainer.innerHTML = `
+            <div class="table-scroll-wrap">
+                <table class="staff-data-table">
+                    <thead>
                         <tr>
-                            <td style="padding: 10px; border: 1px solid var(--border-color);">
-                                <div class="customer-name-cell">
-                                    ${AppUI.avatarHtml(cust.avatar, cust.name, 34)}
-                                    <div>
-                                        <div style="font-weight: 700; color: var(--primary);">${AppUI.escapeHtml(cust.name)}</div>
-                                        <div style="font-size: 0.78rem; color: var(--text-muted);">${AppUI.escapeHtml(cust.email || 'Hồ sơ cục bộ')}</div>
-                                    </div>
-                                </div>
-                            </td>
-                            <td style="padding: 10px; border: 1px solid var(--border-color); font-size: 0.85rem;">
-                                <div><strong>SĐT:</strong> ${AppUI.escapeHtml(cust.phone)}</div>
-                                <div><strong>Ngày sinh:</strong> ${AppUI.escapeHtml(cust.dob)}</div>
-                                <div style="color: var(--text-muted);"><strong>ĐC:</strong> ${AppUI.escapeHtml(cust.address)}</div>
-                            </td>
-                            <td style="padding: 10px; border: 1px solid var(--border-color); font-size: 0.85rem;">
-                                <div><strong>${cust.services.length}</strong> gói dịch vụ</div>
-                                <div style="color: #059669; font-size: 0.78rem;">Đã xác nhận: ${svcConfirmed}/${cust.services.length}</div>
-                            </td>
-                            <td style="padding: 10px; border: 1px solid var(--border-color); font-size: 0.85rem;">
-                                <div><strong>${cust.orders.length}</strong> đơn (${formatVnd(ordTotal)})</div>
-                                <div style="color: #059669; font-size: 0.78rem;">Đã xác nhận: ${ordConfirmed}/${cust.orders.length}</div>
-                            </td>
-                            <td style="padding: 10px; border: 1px solid var(--border-color); text-align: center; white-space: nowrap;">
-                                <button type="button" class="btn-view-customer btn-primary" data-index="${idx}" style="padding: 5px 11px; font-size: 0.82rem;">Xem chi tiết</button>
-                            </td>
+                            <th>Khách hàng</th>
+                            <th>Liên hệ &amp; Địa chỉ</th>
+                            <th>Dịch vụ đã đặt</th>
+                            <th>Đơn hàng SP</th>
+                            <th style="text-align: center;">Thao tác</th>
                         </tr>
-                    `;
-                }).join('')}
-            </tbody>
+                    </thead>
+                    <tbody>
+                        ${filteredCustomers.map((cust, idx) => {
+                            const svcConfirmed = cust.services.filter(s => getRequestStatusFlags(s).isConfirmed).length;
+                            const ordConfirmed = cust.orders.filter(o => getRequestStatusFlags(o).isConfirmed).length;
+                            const ordTotal = cust.orders.filter(o => !getRequestStatusFlags(o).isRecalled).reduce((sum, o) => sum + (Number(o.totalAmount) || 0), 0);
+                            return `
+                                <tr>
+                                    <td>
+                                        <div class="customer-name-cell">
+                                            ${AppUI.avatarHtml(cust.avatar, cust.name, 34)}
+                                            <div>
+                                                <div style="font-weight: 700; color: var(--primary);">${AppUI.escapeHtml(cust.name)}</div>
+                                                <div style="font-size: 0.78rem; color: var(--text-muted);">${AppUI.escapeHtml(cust.email || 'Hồ sơ cục bộ')}</div>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td style="font-size: 0.85rem;">
+                                        <div><strong>SĐT:</strong> ${AppUI.escapeHtml(cust.phone)}</div>
+                                        <div><strong>Ngày sinh:</strong> ${AppUI.escapeHtml(cust.dob)}</div>
+                                        <div style="color: var(--text-muted);"><strong>ĐC:</strong> ${AppUI.escapeHtml(cust.address)}</div>
+                                    </td>
+                                    <td style="font-size: 0.85rem;">
+                                        <div><strong>${cust.services.length}</strong> gói dịch vụ</div>
+                                        <div style="color: #059669; font-size: 0.78rem;">Đã xác nhận: ${svcConfirmed}/${cust.services.length}</div>
+                                    </td>
+                                    <td style="font-size: 0.85rem;">
+                                        <div><strong>${cust.orders.length}</strong> đơn (${formatVnd(ordTotal)})</div>
+                                        <div style="color: #059669; font-size: 0.78rem;">Đã xác nhận: ${ordConfirmed}/${cust.orders.length}</div>
+                                    </td>
+                                    <td style="text-align: center; white-space: nowrap;">
+                                        <button type="button" class="btn-view-customer btn-primary" data-cust-idx="${idx}" style="padding: 5px 12px; font-size: 0.82rem;">Xem chi tiết</button>
+                                    </td>
+                                </tr>
+                            `;
+                        }).join('')}
+                    </tbody>
+                </table>
+            </div>
         `;
+    }
 
-        customerListContainer.innerHTML = '';
-        customerListContainer.appendChild(table);
-
-        customerListContainer.querySelectorAll('.btn-view-customer').forEach(btn => {
-            btn.addEventListener('click', function() {
-                const idx = parseInt(this.getAttribute('data-index'), 10);
-                openCustomerDetail(filteredCustomers[idx]);
-            });
+    /* Event delegation xử lý yêu cầu và hồ sơ khách hàng */
+    if (customerListContainer) {
+        customerListContainer.addEventListener('click', function(e) {
+            const viewReqBtn = e.target.closest('.btn-view-req');
+            if (viewReqBtn) {
+                const req = currentRenderedRequests[parseInt(viewReqBtn.getAttribute('data-req-idx'), 10)];
+                if (req) openRequestDetail(req);
+                return;
+            }
+            const confirmBtn = e.target.closest('.btn-confirm-req');
+            if (confirmBtn) {
+                const req = currentRenderedRequests[parseInt(confirmBtn.getAttribute('data-req-idx'), 10)];
+                if (req) confirmCustomerRequest(req.kind, req.realIdx);
+                return;
+            }
+            const recallBtn = e.target.closest('.btn-recall-req');
+            if (recallBtn) {
+                const req = currentRenderedRequests[parseInt(recallBtn.getAttribute('data-req-idx'), 10)];
+                if (req) openRecallModal(req);
+                return;
+            }
+            const viewCustBtn = e.target.closest('.btn-view-customer');
+            if (viewCustBtn) {
+                const cust = currentFilteredCustomers[parseInt(viewCustBtn.getAttribute('data-cust-idx'), 10)];
+                if (cust) openCustomerDetail(cust);
+            }
         });
     }
 
     if (staffCustTabs) {
         staffCustTabs.querySelectorAll('.staff-cust-tab').forEach(tabBtn => {
             tabBtn.addEventListener('click', function() {
-                activeStaffCustTab = tabBtn.getAttribute('data-tab') || 'requests';
-                staffCustTabs.querySelectorAll('.staff-cust-tab').forEach(b => {
-                    b.classList.toggle('active', b === tabBtn);
-                });
+                setActiveCustomerTab(tabBtn.getAttribute('data-tab') || 'requests');
                 renderCustomerList();
             });
         });
     }
 
+    const staffGlobalSearch = document.getElementById('staff-global-search');
+    const staffGlobalSearchForm = document.getElementById('staff-global-search-form');
+    const debouncedRenderCustomerList = debounceStaff(renderCustomerList, 120);
+
     if (staffCustomerSearch) {
-        staffCustomerSearch.addEventListener('input', renderCustomerList);
+        staffCustomerSearch.addEventListener('input', function() {
+            if (staffGlobalSearch) staffGlobalSearch.value = staffCustomerSearch.value;
+            debouncedRenderCustomerList();
+        });
+    }
+    if (staffGlobalSearch) {
+        staffGlobalSearch.addEventListener('input', debounceStaff(function() {
+            if (staffCustomerSearch) staffCustomerSearch.value = staffGlobalSearch.value;
+            renderCustomerList();
+        }, 140));
+    }
+    if (staffGlobalSearchForm) {
+        staffGlobalSearchForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            if (staffCustomerSearch && staffGlobalSearch) {
+                staffCustomerSearch.value = staffGlobalSearch.value;
+            }
+            renderCustomerList();
+            scrollToStaffSection('quan-ly-khach-hang');
+        });
     }
     if (staffRequestTypeFilter) {
         staffRequestTypeFilter.addEventListener('change', renderCustomerList);
     }
     if (staffRequestStatusFilter) {
         staffRequestStatusFilter.addEventListener('change', renderCustomerList);
+    }
+
+    /* Điều hướng sidebar, nút Hero và làm mới CSDL */
+    document.querySelectorAll('.staff-sidebar [data-scroll-target]').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const targetId = btn.getAttribute('data-scroll-target');
+            if (targetId) scrollToStaffSection(targetId);
+        });
+    });
+
+    function openPendingRequestsFilter(statusVal) {
+        setActiveCustomerTab('requests');
+        if (staffRequestStatusFilter) {
+            staffRequestStatusFilter.value = statusVal || 'pending';
+        }
+        renderCustomerList();
+        scrollToStaffSection('quan-ly-khach-hang');
+    }
+
+    document.querySelectorAll('[data-filter-req]').forEach(btn => {
+        btn.addEventListener('click', function() {
+            openPendingRequestsFilter(btn.getAttribute('data-filter-req') || 'all');
+        });
+    });
+
+    document.querySelectorAll('[data-open-tab]').forEach(btn => {
+        btn.addEventListener('click', function() {
+            setActiveCustomerTab(btn.getAttribute('data-open-tab') || 'profiles');
+            renderCustomerList();
+            scrollToStaffSection('quan-ly-khach-hang');
+        });
+    });
+
+    const btnHeaderRefresh = document.getElementById('btn-header-refresh');
+    if (btnHeaderRefresh) {
+        btnHeaderRefresh.addEventListener('click', function() {
+            if (typeof AppData.refreshFromDatabase === 'function') {
+                AppData.refreshFromDatabase();
+            }
+            updateStaffDatabasePill();
+            loadStaffProfile();
+            renderTimetable();
+            if (!shiftForm.classList.contains('hidden')) {
+                renderShiftPicker();
+            }
+            renderCustomerList();
+        });
+    }
+
+    const btnHeroPendingReqs = document.getElementById('btn-hero-pending-reqs');
+    if (btnHeroPendingReqs) {
+        btnHeroPendingReqs.addEventListener('click', function() {
+            openPendingRequestsFilter('pending');
+        });
+    }
+
+    [document.getElementById('btn-hero-add-shift'), document.getElementById('btn-side-add-shift')].forEach(btn => {
+        if (!btn) return;
+        btn.addEventListener('click', function() {
+            scrollToStaffSection('ca-truc');
+            if (btnAddShift) btnAddShift.click();
+        });
+    });
+
+    const btnSideThisWeek = document.getElementById('btn-side-this-week');
+    if (btnSideThisWeek) {
+        btnSideThisWeek.addEventListener('click', function() {
+            scrollToStaffSection('ca-truc');
+            if (btnThisWeek) btnThisWeek.click();
+        });
+    }
+
+    const btnHeroEditProfile = document.getElementById('btn-hero-edit-profile');
+    if (btnHeroEditProfile) {
+        btnHeroEditProfile.addEventListener('click', function() {
+            scrollToStaffSection('thong-tin');
+            if (staffForm && staffForm.classList.contains('hidden') && btnEditStaff) {
+                btnEditStaff.click();
+            }
+        });
     }
 
     const recallModal = document.getElementById('recall-modal');
@@ -1607,6 +1749,19 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
     }
+
+    document.addEventListener('keydown', function(e) {
+        if (e.key !== 'Escape') return;
+        if (document.querySelector('.app-modal-overlay')) return;
+        if (recallModal && !recallModal.classList.contains('hidden')) {
+            recallModal.classList.add('hidden');
+            return;
+        }
+        if (shiftForm && !shiftForm.classList.contains('hidden')) {
+            selectedSlots.clear();
+            shiftForm.classList.add('hidden');
+        }
+    });
 
     if (recallModalForm) {
         recallModalForm.addEventListener('submit', function(e) {
@@ -1660,6 +1815,7 @@ document.addEventListener('DOMContentLoaded', function() {
     renderCustomerList();
 
     window.addEventListener('storage', function(e) {
+        updateStaffDatabasePill();
         if (
             e.key === 'myServices' ||
             e.key === AppData.PRODUCT_ORDERS_KEY ||
